@@ -63,8 +63,14 @@ add_llvm_target(AArch64CodeGen
   AArch64TargetTransformInfo.cpp
   AArch64SIMDInstrOpt.cpp
 
+  PACStack/AArch64PACStack.cpp
+
   DEPENDS
   intrinsics_gen
+  PACStack
+
+  LINK_LIBS
+  PACStack
 )
 
 add_subdirectory(AsmParser)
