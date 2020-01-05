@@ -88,6 +88,7 @@ MachineInstr *AArch64PACStack::replaceSpillOfLr(MachineBasicBlock &MBB, const un
         assert(!MBBI->findRegisterUseOperand(AArch64::LR, true, TRI) && "didn't expect LR use here!!!");
         break;
       case AArch64::STRXui:
+      case AArch64::STRXpre:
       case AArch64::STPXpre:
       case AArch64::STPXi:
         if (auto pO = MBBI->findRegisterUseOperand(AArch64::LR, true, TRI)) {
@@ -106,9 +107,10 @@ MachineInstr *AArch64PACStack::replaceLoadOfLr(MachineBasicBlock &MBB, const uns
     switch (MI.getOpcode()) {
       default:
         break;
+      case AArch64::LDRXui:
+      case AArch64::LDRXpost:
       case AArch64::LDPXi:
       case AArch64::LDPXpost:
-      case AArch64::LDRXui:
         if (auto pO = MI.findRegisterDefOperand(AArch64::LR, false, TRI)) {
           assert(!MI.findRegisterDefOperand(reg, false, TRI) && "tyring to do double load");
           pO->setReg(reg);
