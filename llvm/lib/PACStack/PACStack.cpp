@@ -31,8 +31,14 @@ static cl::opt<PACStackType> PACStackTypeOpt(
                clEnumValN(PACStackNoMask, "nomask", "PACStack without masking")
     ));
 
+static cl::opt<bool>
+    EnableAArch64IRPass("aarch64-pacstack-ir-pass", cl::Hidden,
+                        cl::desc("Do the PACStack IR Pass in target"),
+                        cl::init(true));
+
 bool llvm::PACStack::isEnabled() { return PACStackTypeOpt != PACStackNone; }
 bool llvm::PACStack::enableMasking() { return PACStackTypeOpt == PACStackFull; }
+bool llvm::PACStack::doAArch64IRPass() { return EnableAArch64IRPass; }
 
 #define DEBUG_TYPE "PACStack"
 
@@ -59,6 +65,8 @@ private:
 char PACStackOptCallPass::ID = 0;
 
 static RegisterPass<PACStackOptCallPass> X("pacstack-opt", "");
+
+Pass *llvm::PACStack::createPACStackOptCallPass() { return new PACStackOptCallPass(); }
 
 bool PACStackOptCallPass::runOnFunction(Function &F) {
   switch(PACStackTypeOpt) {

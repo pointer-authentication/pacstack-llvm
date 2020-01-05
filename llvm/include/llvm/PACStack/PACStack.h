@@ -11,6 +11,7 @@
 #define LLVM_PACSTACK_H
 
 #include "llvm/ADT/StringRef.h"
+#include "llvm/Pass.h"
 
 namespace llvm {
 namespace PACStack {
@@ -23,6 +24,9 @@ enum PACStackType {
   PACStackNoMask
 };
 
+Pass *createPACStackOptCallPass();
+
+bool doAArch64IRPass();
 bool isEnabled();
 bool enableMasking();
 

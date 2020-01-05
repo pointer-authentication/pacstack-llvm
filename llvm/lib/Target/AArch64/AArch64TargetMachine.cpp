@@ -450,6 +450,9 @@ void AArch64PassConfig::addIRPasses() {
   }
 
   addPass(createAArch64StackTaggingPass());
+
+  if (PACStack::doAArch64IRPass())
+    addPass(PACStack::createPACStackOptCallPass());
 }
 
 // Pass Pipeline Configuration
