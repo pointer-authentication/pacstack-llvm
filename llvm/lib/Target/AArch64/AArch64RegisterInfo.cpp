@@ -16,6 +16,7 @@
 #include "AArch64InstrInfo.h"
 #include "AArch64MachineFunctionInfo.h"
 #include "AArch64Subtarget.h"
+#include "PACStack/AArch64PACStack.h"
 #include "MCTargetDesc/AArch64AddressingModes.h"
 #include "llvm/ADT/BitVector.h"
 #include "llvm/ADT/Triple.h"
@@ -205,6 +206,11 @@ AArch64RegisterInfo::getReservedRegs(const MachineFunction &MF) const {
   // SLH uses register W16/X16 as the taint register.
   if (MF.getFunction().hasFnAttribute(Attribute::SpeculativeLoadHardening))
     markSuperRegs(Reserved, AArch64::W16);
+
+  // Reserve PACStack CR register if PACStack used for function
+  if (PACStack::doPACStack(MF)) {
+    markSuperRegs(Reserved, PACStack::CR);
+  }
 
   assert(checkAllSuperRegsMarked(Reserved));
   return Reserved;
