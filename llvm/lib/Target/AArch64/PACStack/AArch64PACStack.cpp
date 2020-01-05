@@ -55,8 +55,8 @@ using namespace llvm::PACStack;
 char AArch64PACStack::ID = 0;
 
 bool AArch64PACStack::runOnMachineFunction(MachineFunction &MF) {
-  if (MF.getFunction().hasFnAttribute(Attribute::AttrKind::NoReturn))
-    return false; // Skip NoReturn functions (which might include main)
+  if (! doPACStack(MF))
+    return false;
 
   STI = &MF.getSubtarget<AArch64Subtarget>();
   TII = STI->getInstrInfo();
@@ -150,7 +150,7 @@ bool AArch64PACStack::instrumentPrologue(MachineFunction &MF) {
 
 
       buildPACIA(*pMBB, DL, AArch64::LR, CR, pEndOfAuth).setMIFlag(MachineInstr::FrameSetup);
-      if (enableMasking())
+      if (doPACStackMasking(MF))
         insertCollisionProtection(*pMBB, pEndOfAuth, MachineInstr::FrameSetup);
       buildMOV(*pMBB, DL, CR, AArch64::LR, pEndOfAuth).setMIFlag(MachineInstr::FrameSetup);
 
@@ -198,7 +198,7 @@ bool AArch64PACStack::instrumentEpilogues(MachineFunction &MF) {
       assert(pLoadMI->getNextNode() != nullptr && "next node should always be non-null");
 
       buildMOV(MBB, DL, AArch64::LR, CR, pLoadMI).setMIFlag(MachineInstr::FrameDestroy);
-      if (enableMasking())
+      if (doPACStackMasking(MF))
         insertCollisionProtection(MBB, pEndOfAuth, MachineInstr::FrameDestroy);
       buildAUTIA(MBB, DL, AArch64::LR, CR, pEndOfAuth).setMIFlag(MachineInstr::FrameDestroy);
 
@@ -212,8 +212,8 @@ bool AArch64PACStack::instrumentEpilogues(MachineFunction &MF) {
 }
 
 inline void AArch64PACStack::insertCollisionProtection(MachineBasicBlock &MBB,
-                                                         MachineInstr *pMI,
-                                                         const MachineInstr::MIFlag &flag) {
+                                                       MachineInstr *pMI,
+                                                       const MachineInstr::MIFlag &flag) {
   const DebugLoc DL;
 
   // MOV X15, XZR      ; X15 <- 0

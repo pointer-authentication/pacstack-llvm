@@ -44,8 +44,12 @@ static inline bool defsReg(const MachineFunction &MF, const unsigned reg) {
 inline bool doPACStack(MachineFunction &MF) {
   const auto &F = MF.getFunction();
 
+  if (F.hasFnAttribute(Attribute::AttrKind::NoReturn))
+    return false; // Skip NoReturn functions (which might include main)
+
   if (!F.hasFnAttribute(PACStackAttribute))
     return false;
+
   return (F.getFnAttribute(PACStackAttribute).getValueAsString() != "none");
 }
 
