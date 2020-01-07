@@ -59,6 +59,7 @@ FunctionPass *createAArch64PreLegalizeCombiner();
 FunctionPass *createAArch64StackTaggingPass();
 
 FunctionPass *createAArch64PACStack();
+FunctionPass *createAArch64DummyPA();
 
 void initializeAArch64A53Fix835769Pass(PassRegistry&);
 void initializeAArch64A57FPLoadBalancingPass(PassRegistry&);

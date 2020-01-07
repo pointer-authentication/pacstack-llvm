@@ -64,6 +64,7 @@ add_llvm_target(AArch64CodeGen
   AArch64SIMDInstrOpt.cpp
 
   PACStack/AArch64PACStack.cpp
+  PACStack/AArch64DummyPA.cpp
 
   DEPENDS
   intrinsics_gen
