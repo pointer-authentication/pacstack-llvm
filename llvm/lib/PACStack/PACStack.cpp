@@ -36,9 +36,15 @@ static cl::opt<bool>
                         cl::desc("Do the PACStack IR Pass in target"),
                         cl::init(true));
 
+static cl::opt<bool>
+    EnableAArch64DummyPA("aarch64-pacstack-dummy-pa", cl::Hidden,
+                         cl::desc("Replace PACStack PA to the PA analog"),
+                         cl::init(true));
+
 bool llvm::PACStack::isEnabled() { return PACStackTypeOpt != PACStackNone; }
 bool llvm::PACStack::enableMasking() { return PACStackTypeOpt == PACStackFull; }
 bool llvm::PACStack::doAArch64IRPass() { return EnableAArch64IRPass; }
+bool llvm::PACStack::doDummyPA() { return EnableAArch64DummyPA; }
 
 #define DEBUG_TYPE "PACStack"
 
