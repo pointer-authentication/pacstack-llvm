@@ -618,5 +618,6 @@ void AArch64PassConfig::addPreEmitPass() {
     addPass(createAArch64CollectLOHPass());
 
   addPass(createAArch64PACStack());
-  addPass(createAArch64DummyPA());
+  if (PACStack::doDummyPA())
+    addPass(createAArch64DummyPA());
 }
