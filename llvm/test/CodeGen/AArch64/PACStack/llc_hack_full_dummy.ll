@@ -1,5 +1,4 @@
 ; RUN: llc -aarch64-pacstack-ir-pass -aarch64-pacstack-dummy-pa -pacstack=full -mtriple=aarch64-none-linux-gnu -mattr=v8.3a -verify-machineinstrs < %s | FileCheck %s
-; XFAIL: *
 
 ; CHECK-LABEL: @func2
 ; CHECK-NOT: pacia

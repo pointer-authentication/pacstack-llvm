@@ -96,13 +96,13 @@ bool AArch64DummyPA::runOnMachineFunction(MachineFunction &MF) {
 
 bool AArch64DummyPA::convertBasicPAInstr(MachineBasicBlock &MBB, MachineInstr &MI) {
   const auto &DL = MI.getDebugLoc();
-  auto dst = MI.getOperand(0);
-  auto mod = MI.getOperand(1);
+  auto dst = MI.getOperand(0).getReg();
+  auto mod = MI.getOperand(1).getReg();
 
-  BuildMI(MBB, MI, DL, TII->get(AArch64::EORXri)).add(dst).add(dst).addImm(17);
-  BuildMI(MBB, MI, DL, TII->get(AArch64::EORXri)).add(dst).add(dst).addImm(37);
-  BuildMI(MBB, MI, DL, TII->get(AArch64::EORXri)).add(dst).add(dst).addImm(97);
-  BuildMI(MBB, MI, DL, TII->get(AArch64::EORXrs)).add(dst).add(dst).add(mod).addImm(0);
+  BuildMI(MBB, MI, DL, TII->get(AArch64::EORXri), dst).addReg(dst).addImm(17);
+  BuildMI(MBB, MI, DL, TII->get(AArch64::EORXri), dst).addReg(dst).addImm(37);
+  BuildMI(MBB, MI, DL, TII->get(AArch64::EORXri), dst).addReg(dst).addImm(97);
+  BuildMI(MBB, MI, DL, TII->get(AArch64::EORXrs), dst).addReg(dst).addReg(mod).addImm(0);
 
   MI.removeFromParent();
   return true;
