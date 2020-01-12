@@ -97,6 +97,7 @@
 #include "AArch64Subtarget.h"
 #include "AArch64TargetMachine.h"
 #include "MCTargetDesc/AArch64AddressingModes.h"
+#include "PACStack/AArch64PACStack.h"
 #include "llvm/ADT/ScopeExit.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/Statistic.h"
@@ -2094,6 +2095,9 @@ void AArch64FrameLowering::determineCalleeSaves(MachineFunction &MF,
         ExtraCSSpill = PairedReg;
     }
   }
+
+  if (PACStack::doPACStack(MF))
+    SavedRegs.set(PACStack::CR);
 
   // Calculates the callee saved stack size.
   unsigned CSStackSize = 0;

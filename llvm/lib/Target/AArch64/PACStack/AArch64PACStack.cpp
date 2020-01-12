@@ -44,6 +44,10 @@ private:
 
   inline bool hasFrameSetup(const MachineBasicBlock *pMBB) const;
   inline MachineBasicBlock *findFrameSetupBlock(MachineFunction &MF) const;
+
+  inline MachineInstr *findFrameDestroyStart(MachineBasicBlock &MBB) const;
+  inline MachineInstr *findFrameSetupStart(MachineBasicBlock &MBB) const;
+  inline MachineInstr *findFrameSetupStart(MachineFunction &MF) const;
 };
 
 }
@@ -112,7 +116,7 @@ MachineInstr *AArch64PACStack::replaceLoadOfLr(MachineBasicBlock &MBB, const uns
       case AArch64::LDPXi:
       case AArch64::LDPXpost:
         if (auto pO = MI.findRegisterDefOperand(AArch64::LR, false, TRI)) {
-          assert(!MI.findRegisterDefOperand(reg, false, TRI) && "tyring to do double load");
+          //assert(!MI.findRegisterDefOperand(reg, false, TRI) && "tyring to do double load");
           pO->setReg(reg);
           return &MI;
         }
@@ -127,44 +131,47 @@ bool AArch64PACStack::instrumentPrologue(MachineFunction &MF) {
   assert(TRI->isReservedReg(MF, CR) && "expecting CR to be reserved");
   // FIXME: should we fix LiveIns for CR?
 
-  // First we need to find FrameSetup, which in some cases might be omitted
-  if (auto pMBB = findFrameSetupBlock(MF)) {
-    // Then we need to find the LR spill, if any
-    if (auto pSpillMI = replaceSpillOfLr(*pMBB, CR)) {
-      auto *const pEndOfAuth = pSpillMI->getNextNode();
+  auto *MI = findFrameSetupStart(MF);
 
-      // Modify this:
-      //
-      //   STR CR          ; stack <- $aret_{i-1}$                            <- pSpillMI
-      //   ...                                                                <- pEndOfAuth
-      //
-      // to:
-      //
-      //   STR CR          ; stack <- aretm{i-1}$                           <- pSpillMI
-      //   PACIA LR, CR    ; LR <- aret{i} = pacia(ret{i}, aretm_{i-1})
-      //                   ; if doing collision protection:
-      //   MOV X15, XZR      ; X15 <- 0
-      //   PACIA X15, CR     ; X15 <- mask = pacia(0, aretm{i-1})
-      //   EOR LR, LR, X15   ; LR <- aretm{i} = aret{i} ^ mask{i-1}
-      //   MOV X15, XZR      ; X15 <- 0
-      //   MOV CR, LR      ; CR <- aretm{i}
-      //   ...                                                                <- pEndOfAuth
-
-
-      buildPACIA(*pMBB, DL, AArch64::LR, CR, pEndOfAuth).setMIFlag(MachineInstr::FrameSetup);
-      if (doPACStackMasking(MF))
-        insertCollisionProtection(*pMBB, pEndOfAuth, MachineInstr::FrameSetup);
-      buildMOV(*pMBB, DL, CR, AArch64::LR, pEndOfAuth).setMIFlag(MachineInstr::FrameSetup);
-
-      // FIXME: can we always expect only one FrameSetup?
-      LLVM_DEBUG(dbgs() << DEBUG_TYPE << ": instrumenting FrameSetup of   " << MF.getName() << "\n");
-      return true;
-    }
+  if (MI == nullptr) {
+    LLVM_DEBUG(dbgs() << DEBUG_TYPE << ": FrameSetup NOT instrumented in "
+                      << MF.getName() << "\n");
+    return false;
   }
 
-  assert(!defsReg(MF, CR) && "CR is used, but not saved?"); // FIXME: this is pretty heavy, maybe remove?
+  auto *MBB = MI->getParent();
 
-  LLVM_DEBUG(dbgs() << DEBUG_TYPE << ": FrameSetup NOT instrumented in " << MF.getName() << "\n");
+  // First calculate the new aret into LR and leave CR intact
+  buildPACIA(*MBB, DL, AArch64::LR, CR, MI)
+      .setMIFlag(MachineInstr::FrameSetup);
+  if (doPACStackMasking(MF))
+    insertCollisionProtection(*MBB, MI, MachineInstr::FrameSetup);
+
+  // We should now have:
+  //    x28 = aret_{i-1}  From stack
+  //    LR  = aret_{1}    From stack
+  // and can continue with normal FrameSetup to store:
+  //     aret{i-1} from CR into x28 slot
+  //     aret{i} from LR into frame record
+
+  // Move through FrameSetup
+  while (MI->getFlag(MachineInstr::FrameSetup)) {
+    // Don't kill LR on store, we need it afterwards
+    if (isStore(*MI) && MI->killsRegister(AArch64::LR)) {
+      MI->clearRegisterKills(AArch64::LR, TRI);
+    }
+
+    MI = MI->getNextNode();
+  }
+
+  // Then, at end of FrameSetup, move aret_{i} to CR from LR
+  buildMOV(*MBB, DL, CR, AArch64::LR, MI)
+      .setMIFlag(MachineInstr::FrameSetup)
+      // Kill LR here since we don't need it anymore
+      ->addRegisterKilled(AArch64::LR, TRI);
+
+  LLVM_DEBUG(dbgs() << DEBUG_TYPE << ": instrumenting FrameSetup of   "
+                    << MF.getName() << "\n");
   return false;
 }
 
@@ -172,44 +179,48 @@ bool AArch64PACStack::instrumentEpilogues(MachineFunction &MF) {
   bool changed = false;
   const DebugLoc DL;
 
+  // This could be stupid, as there might be better ways to find FrameDestory.
+  // I assume we cannot rely on isReturnBlock and that there might be multiple
+  // FrameDestroy blocks within one function. Both assumptions might or might
+  // not be true, but at least this should work...
   for (auto &MBB : MF) {
-    if (!MBB.isReturnBlock())
+    auto *MI = findFrameDestroyStart(MBB);
+
+    if (MI == nullptr)
       continue;
 
-    if (auto pLoadMI = replaceLoadOfLr(MBB, CR)) {
-      auto *const pEndOfAuth = pLoadMI->getNextNode();
+    // STore aret{i} in x15 before FrameDestroy
+    buildMOV(MBB, DL, AArch64::X15, CR, MI)
+        .setMIFlag(MachineInstr::FrameDestroy)
+        ->addRegisterKilled(CR, TRI);
 
-      // Modify this:
-      //
-      //   LDR CR          ; <- load CR from stack (pLoadMI)          <- pLoadMI
-      //   ...                                                        <- pEndOfAuth
-      //
-      // to:
-      //
-      //   MOV LR, CR      ; LR <- aretm{i}
-      //   LDR CR          ; aretm'{i-1} <- stack                      <- pLoadMI
-      //                   ; if doing collision protection:
-      //   MOV X15, XZR      ; X15 <- 0
-      //   PACIA X15, CR     ; X15 <- mask'{i-1} = pacia(0, aretm{i-1})
-      //   EOR LR, LR, X15   ; LR <- aret'{i} = aretm{i} ^ mask'{i-1}
-      //   MOV X15, XZR      ; X15 <- 0
-      //   AUTIA LR, CR    ; LR <- ret{i} or ret*{i}
-      //   ...                                                        <- pEndOfAuth
+    // Then move to the end of FrameDestory
+    do {
+      MI = MI->getNextNode();
+    } while (MI->getFlag(MachineInstr::FrameDestroy));
+    assert(MI != nullptr);
 
-      assert(MBB.getLastNonDebugInstr() != MBB.end() && MBB.getLastNonDebugInstr()->isReturn() && "should find return");
-      assert(pLoadMI->getNextNode() != nullptr && "next node should always be non-null");
+    // We should now have:
+    //    x15 = aret_{i}    Secure
+    //    x28 = aret_{i-1}  From stack
+    //    LR  = aret_{1}    From stack (ignored)
 
-      buildMOV(MBB, DL, AArch64::LR, CR, pLoadMI).setMIFlag(MachineInstr::FrameDestroy);
-      if (doPACStackMasking(MF))
-        insertCollisionProtection(MBB, pEndOfAuth, MachineInstr::FrameDestroy);
-      buildAUTIA(MBB, DL, AArch64::LR, CR, pEndOfAuth).setMIFlag(MachineInstr::FrameDestroy);
+    // Lets move the secure aret_{i} into LR
+    buildMOV(MBB, DL, AArch64::LR, AArch64::X15, MI).setMIFlag(MachineInstr::FrameDestroy);
 
-      LLVM_DEBUG(dbgs() << DEBUG_TYPE << ": instrumenting FrameDestroy of " << MF.getName() << "\n");
-      changed = true;
-    }
+    // Remove masking from LR if masking is enabled
+    if (doPACStackMasking(MF))
+      insertCollisionProtection(MBB, MI, MachineInstr::FrameDestroy);
+
+    // Authenticate LR
+    buildAUTIA(MBB, DL, AArch64::LR, CR, MI).setMIFlag(MachineInstr::FrameDestroy);
+
+    LLVM_DEBUG(dbgs() << DEBUG_TYPE << ": instrumenting FrameDestroy of " << MF.getName() << "\n");
+    changed = true;
   }
 
-  LLVM_DEBUG(if (!changed) dbgs() << DEBUG_TYPE << ": NO FrameDestroy instrumented in " << MF.getName() << "\n");
+  if (!changed)
+    LLVM_DEBUG(if (!changed) dbgs() << DEBUG_TYPE << ": NO FrameDestroy instrumented in " << MF.getName() << "\n");
   return changed;
 }
 
@@ -243,3 +254,32 @@ MachineBasicBlock *AArch64PACStack::findFrameSetupBlock(MachineFunction &MF) con
   return nullptr;
 }
 
+MachineInstr *AArch64PACStack::findFrameDestroyStart(MachineBasicBlock &MBB) const {
+  for (auto &MBBI : MBB) {
+    if (MBBI.getFlag(MachineInstr::FrameDestroy))
+      return &MBBI;
+  }
+
+  return nullptr;
+}
+
+
+MachineInstr *AArch64PACStack::findFrameSetupStart(MachineBasicBlock &MBB) const {
+  // Check if this MBB contains FrameSetup
+  for (auto &MBBI : MBB) {
+      if (MBBI.getFlag(MachineInstr::FrameSetup))
+        return &MBBI;
+  }
+
+  // Continue looking into successors
+  for (auto &successor : MBB.successors()) {
+    auto *start = findFrameSetupStart(*successor);
+    if (start != nullptr)
+      return start;
+  }
+  return nullptr;
+}
+
+MachineInstr *AArch64PACStack::findFrameSetupStart(MachineFunction &MF) const {
+  return findFrameSetupStart(MF.front());
+}

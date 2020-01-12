@@ -41,6 +41,30 @@ static inline bool defsReg(const MachineFunction &MF, const unsigned reg) {
   return false;
 }
 
+static inline bool isStore(const MachineInstr &MI) {
+  switch(MI.getOpcode()) {
+    case AArch64::STRXui:
+    case AArch64::STRXpre:
+    case AArch64::STPXpre:
+    case AArch64::STPXi:
+      return true;
+    default:
+      return false;
+  }
+}
+
+static inline bool isLoad(const MachineInstr &MI) {
+  switch(MI.getOpcode()) {
+    case AArch64::LDRXui:
+    case AArch64::LDRXpost:
+    case AArch64::LDPXi:
+    case AArch64::LDPXpost:
+      return true;
+    default:
+      return false;
+  }
+}
+
 inline bool doPACStack(const MachineFunction &MF) {
   const auto &F = MF.getFunction();
 
