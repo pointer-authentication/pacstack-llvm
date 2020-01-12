@@ -34,12 +34,12 @@ static cl::opt<PACStackType> PACStackTypeOpt(
 static cl::opt<bool>
     EnableAArch64IRPass("aarch64-pacstack-ir-pass", cl::Hidden,
                         cl::desc("Do the PACStack IR Pass in target"),
-                        cl::init(true));
+                        cl::init(false));
 
 static cl::opt<bool>
     EnableAArch64DummyPA("aarch64-pacstack-dummy-pa", cl::Hidden,
                          cl::desc("Replace PACStack PA to the PA analog"),
-                         cl::init(true));
+                         cl::init(false));
 
 bool llvm::PACStack::isEnabled() { return PACStackTypeOpt != PACStackNone; }
 bool llvm::PACStack::enableMasking() { return PACStackTypeOpt == PACStackFull; }
