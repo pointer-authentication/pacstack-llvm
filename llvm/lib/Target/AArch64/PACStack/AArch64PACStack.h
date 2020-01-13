@@ -25,6 +25,7 @@ namespace llvm {
 namespace PACStack {
 
 static constexpr unsigned CR = AArch64::X28;
+static constexpr unsigned CRSub = AArch64::W28;
 static constexpr unsigned maskReg = AArch64::X15;
 
 static inline bool defsReg(const MachineBasicBlock &MBB, const unsigned reg) {

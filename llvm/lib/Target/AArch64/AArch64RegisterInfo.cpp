@@ -209,7 +209,7 @@ AArch64RegisterInfo::getReservedRegs(const MachineFunction &MF) const {
 
   // Reserve PACStack CR register if PACStack used for function
   if (PACStack::doPACStack(MF)) {
-    markSuperRegs(Reserved, PACStack::CR);
+    markSuperRegs(Reserved, PACStack::CRSub);
   }
 
   assert(checkAllSuperRegsMarked(Reserved));
