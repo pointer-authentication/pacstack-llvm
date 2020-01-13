@@ -591,6 +591,8 @@ void AArch64PassConfig::addPreSched2() {
     if (EnableFalkorHWPFFix)
       addPass(createFalkorHWPFFixPass());
   }
+
+  addPass(createAArch64PACStack());
 }
 
 void AArch64PassConfig::addPreEmitPass() {
@@ -617,7 +619,6 @@ void AArch64PassConfig::addPreEmitPass() {
       TM->getTargetTriple().isOSBinFormatMachO())
     addPass(createAArch64CollectLOHPass());
 
-  addPass(createAArch64PACStack());
   if (PACStack::doDummyPA())
     addPass(createAArch64DummyPA());
 }
