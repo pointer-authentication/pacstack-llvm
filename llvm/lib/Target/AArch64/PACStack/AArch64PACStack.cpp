@@ -196,6 +196,7 @@ bool AArch64PACStack::instrumentEpilogues(MachineFunction &MF) {
 
     // Then move to the end of FrameDestory
     do {
+      assert(!MI->isReturn());
       MI = MI->getNextNode();
     } while (MI->getFlag(MachineInstr::FrameDestroy));
     assert(MI != nullptr);
