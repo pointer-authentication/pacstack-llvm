@@ -2,28 +2,34 @@
 
 ; CHECK-LABEL: @func2
 ; CHECK-NOT: pacia
-; CHECK: eor
-; CHECK: eor
-; CHECK: eor
-; CHECK: eor
-; CHECK: mov
-; CHECK: eor
-; CHECK: eor
-; CHECK: eor
-; CHECK: eor
+; CHECK-DAG: eor x30
+; CHECK-DAG: eor x30
+; CHECK-DAG: eor x30
+; CHECK-DAG: eor x30
+; CHECK-DAG: mov x15, xzr
+; CHECK: eor x15
+; CHECK: eor x15
+; CHECK: eor x15
+; CHECK: eor x15
+; CHECK: eor x30, x30, x15
+; CHECK: mov x15, xzr
 ; CHECK-NOT: pacia
 ; CHECK: bl
 ; CHECK-NOT: pacia
-; CHECK: eor
-; CHECK: eor
-; CHECK: eor
-; CHECK: eor
-; CHECK: mov
-; CHECK: eor
-; CHECK: eor
-; CHECK: eor
-; CHECK: eor
+; CHECK: mov x15, x28
+; CHECK: ld
+; CHECK: mov x15, xzr
+; CHECK: eor x15
+; CHECK: eor x15
+; CHECK: eor x15
+; CHECK: eor x15
+; CHECK: eor x30
+; CHECK: eor x30
+; CHECK: eor x30
+; CHECK: eor x30
 ; CHECK-NOT: autia
+; CHECK: eor x30, x30, x28
+; CHECK: mov x15, xzr
 ; CHECK: ret
 define void @func2() #0 {
   call void @func1()

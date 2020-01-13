@@ -1,9 +1,8 @@
 ; RUN: llc -aarch64-pacstack-ir-pass -pacstack=full -mtriple=aarch64-none-linux-gnu -mattr=v8.3a -verify-machineinstrs < %s | FileCheck %s
-; XFAIL: *
 
 ; CHECK-LABEL: @StopStopwatch
-; CHECK: pacia  x30, x28
-; CHECK: mov x15, xzr
+; CHECK-DAG: pacia  x30, x28
+; CHECK-DAG: mov x15, xzr
 ; CHECK: pacia x15, x28
 ; CHECK: eor x30, x30, x15
 ; CHECK-DAG: st{{.*}}x30
@@ -11,8 +10,7 @@
 ; CHECK: mov x28, x30
 ; CHECK: bl clock
 ; CHECK: mov x15, x28
-; CHECK-DAG: ld{{.*}}x30
-; CHECK-DAG: ld{{.*}}x28
+; CHECK: ld{{.*}}x28
 ; CHECK: pacia x15, x28
 ; CHECK: eor x30, x30, x15
 ; CHECK-DAG: mov x15, xzr
