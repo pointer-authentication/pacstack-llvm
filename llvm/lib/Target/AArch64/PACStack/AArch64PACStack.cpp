@@ -140,7 +140,7 @@ bool AArch64PACStack::instrumentPrologue(MachineFunction &MF) {
   }
 
   auto *MBB = MI->getParent();
-  assert(MBB != nullptr);
+  assert(MBB != nullptr && "MI should always have parent!");
 
   // First calculate the new aret into LR and leave CR intact
   buildPACIA(*MBB, DL, AArch64::LR, CR, MI)
