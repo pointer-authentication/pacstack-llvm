@@ -66,7 +66,7 @@ static inline bool isLoad(const MachineInstr &MI) {
   }
 }
 
-inline bool doPACStack(const MachineFunction &MF) {
+inline bool hasPACStackAttribute(const MachineFunction &MF) {
   const auto &F = MF.getFunction();
 
   if (F.hasFnAttribute(Attribute::AttrKind::NoReturn))
@@ -76,6 +76,19 @@ inline bool doPACStack(const MachineFunction &MF) {
     return false;
 
   return (F.getFnAttribute(PACStackAttribute).getValueAsString() != "none");
+}
+
+inline bool needsPACStack(const MachineFunction &MF) {
+  if (!hasPACStackAttribute(MF))
+    return false;
+
+  for (const auto &Info : MF.getFrameInfo().getCalleeSavedInfo()) {
+    const auto r = Info.getReg();
+    if (r == AArch64::LR || r == PACStack::CR)
+      return true;
+  }
+
+  return false;
 }
 
 inline bool doPACStackMasking(MachineFunction &MF) {

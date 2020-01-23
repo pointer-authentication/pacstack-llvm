@@ -42,12 +42,8 @@ private:
 
   inline void insertCollisionProtection(MachineBasicBlock &MBB, MachineInstr *pMI, const MachineInstr::MIFlag &flag);
 
-  inline bool hasFrameSetup(const MachineBasicBlock *pMBB) const;
-  inline MachineBasicBlock *findFrameSetupBlock(MachineFunction &MF) const;
-
   inline MachineInstr *findFrameDestroyStart(MachineBasicBlock &MBB) const;
   inline MachineInstr *findFrameSetupStart(MachineBasicBlock &MBB) const;
-  inline MachineInstr *findFrameSetupStart(MachineFunction &MF) const;
 };
 
 }
@@ -59,7 +55,8 @@ using namespace llvm::PACStack;
 char AArch64PACStack::ID = 0;
 
 bool AArch64PACStack::runOnMachineFunction(MachineFunction &MF) {
-  if (! doPACStack(MF))
+  // Check if PACStack is enabled, and that we spill some stuff
+  if (! needsPACStack(MF))
     return false;
 
   STI = &MF.getSubtarget<AArch64Subtarget>();
@@ -127,53 +124,55 @@ MachineInstr *AArch64PACStack::replaceLoadOfLr(MachineBasicBlock &MBB, const uns
 }
 
 bool AArch64PACStack::instrumentPrologue(MachineFunction &MF) {
+  bool changed = false;
   const DebugLoc DL;
   assert(TRI->isReservedReg(MF, CR) && "expecting CR to be reserved");
   // FIXME: should we fix LiveIns for CR?
 
-  auto *MI = findFrameSetupStart(MF);
+  for (auto &MBB : MF) {
+    auto *MI = findFrameSetupStart(MBB);
 
-  if (MI == nullptr) {
-    LLVM_DEBUG(dbgs() << DEBUG_TYPE << ": FrameSetup NOT instrumented in "
-                      << MF.getName() << "\n");
-    return false;
-  }
+    if (MI == nullptr)
+      continue;
 
-  auto *MBB = MI->getParent();
-  assert(MBB != nullptr && "MI should always have parent!");
+    // First calculate the new aret into LR and leave CR intact
+    buildPACIA(MBB, DL, AArch64::LR, CR, MI)
+        .setMIFlag(MachineInstr::FrameSetup);
+    if (doPACStackMasking(MF))
+      insertCollisionProtection(MBB, MI, MachineInstr::FrameSetup);
 
-  // First calculate the new aret into LR and leave CR intact
-  buildPACIA(*MBB, DL, AArch64::LR, CR, MI)
-      .setMIFlag(MachineInstr::FrameSetup);
-  if (doPACStackMasking(MF))
-    insertCollisionProtection(*MBB, MI, MachineInstr::FrameSetup);
+    // We should now have:
+    //    x28 = aret_{i-1}  From stack
+    //    LR  = aret_{1}    From stack
+    // and can continue with normal FrameSetup to store:
+    //     aret{i-1} from CR into x28 slot
+    //     aret{i} from LR into frame record
 
-  // We should now have:
-  //    x28 = aret_{i-1}  From stack
-  //    LR  = aret_{1}    From stack
-  // and can continue with normal FrameSetup to store:
-  //     aret{i-1} from CR into x28 slot
-  //     aret{i} from LR into frame record
+    // Move through FrameSetup
+    while (MI != nullptr && MI->getFlag(MachineInstr::FrameSetup)) {
+      // Don't kill LR on store, we need it afterwards
+      if (isStore(*MI) && MI->killsRegister(AArch64::LR)) {
+        MI->clearRegisterKills(AArch64::LR, TRI);
+      }
 
-  // Move through FrameSetup
-  while (MI != nullptr && MI->getFlag(MachineInstr::FrameSetup)) {
-    // Don't kill LR on store, we need it afterwards
-    if (isStore(*MI) && MI->killsRegister(AArch64::LR)) {
-      MI->clearRegisterKills(AArch64::LR, TRI);
+      MI = MI->getNextNode();
     }
 
-    MI = MI->getNextNode();
+    // Then, at end of FrameSetup, move aret_{i} to CR from LR
+    buildMOV(MBB, DL, CR, AArch64::LR, MI)
+        .setMIFlag(MachineInstr::FrameSetup)
+            // Kill LR here since we don't need it anymore
+        ->addRegisterKilled(AArch64::LR, TRI);
+
+    LLVM_DEBUG(dbgs() << DEBUG_TYPE << ": instrumenting FrameSetup of "
+                      << MF.getName() << "\n");
+    changed = true;
   }
 
-  // Then, at end of FrameSetup, move aret_{i} to CR from LR
-  buildMOV(*MBB, DL, CR, AArch64::LR, MI)
-      .setMIFlag(MachineInstr::FrameSetup)
-      // Kill LR here since we don't need it anymore
-      ->addRegisterKilled(AArch64::LR, TRI);
-
-  LLVM_DEBUG(dbgs() << DEBUG_TYPE << ": instrumenting FrameSetup of   "
-                    << MF.getName() << "\n");
-  return false;
+  if (!changed)
+    LLVM_DEBUG(dbgs() << DEBUG_TYPE << ": NO FrameSetup instrumented in "
+                      << MF.getName() << "\n");
+  return changed;
 }
 
 bool AArch64PACStack::instrumentEpilogues(MachineFunction &MF) {
@@ -240,21 +239,6 @@ inline void AArch64PACStack::insertCollisionProtection(MachineBasicBlock &MBB,
   buildMOV(MBB, DL, maskReg, AArch64::XZR, pMI).setMIFlag(flag);
 }
 
-bool AArch64PACStack::hasFrameSetup(const MachineBasicBlock *const pMBB) const {
-  assert(pMBB != nullptr);
-  for (const auto &MBBI : *pMBB)
-    if (MBBI.getFlag(MachineInstr::FrameSetup))
-      return true;
-  return false;
-}
-
-MachineBasicBlock *AArch64PACStack::findFrameSetupBlock(MachineFunction &MF) const {
-  for (auto &MBB : MF)
-    if (hasFrameSetup(&MBB))
-      return &MBB;
-  return nullptr;
-}
-
 MachineInstr *AArch64PACStack::findFrameDestroyStart(MachineBasicBlock &MBB) const {
   for (auto &MBBI : MBB) {
     if (MBBI.getFlag(MachineInstr::FrameDestroy))
@@ -272,15 +256,5 @@ MachineInstr *AArch64PACStack::findFrameSetupStart(MachineBasicBlock &MBB) const
         return &MBBI;
   }
 
-  // Continue looking into successors
-  for (auto &successor : MBB.successors()) {
-    auto *start = findFrameSetupStart(*successor);
-    if (start != nullptr)
-      return start;
-  }
   return nullptr;
-}
-
-MachineInstr *AArch64PACStack::findFrameSetupStart(MachineFunction &MF) const {
-  return findFrameSetupStart(MF.front());
 }
