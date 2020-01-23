@@ -42,9 +42,6 @@ private:
 
   inline void insertCollisionProtection(MachineBasicBlock &MBB, MachineInstr *pMI, const MachineInstr::MIFlag &flag);
 
-  inline bool hasFrameSetup(const MachineBasicBlock *pMBB) const;
-  inline MachineBasicBlock *findFrameSetupBlock(MachineFunction &MF) const;
-
   inline MachineInstr *findFrameDestroyStart(MachineBasicBlock &MBB) const;
   inline MachineInstr *findFrameSetupStart(MachineBasicBlock &MBB) const;
 };
@@ -240,21 +237,6 @@ inline void AArch64PACStack::insertCollisionProtection(MachineBasicBlock &MBB,
   buildPACIA(MBB, DL, maskReg, CR, pMI).setMIFlag(flag);
   buildEOR(MBB, DL, AArch64::LR, maskReg, pMI).setMIFlag(flag);
   buildMOV(MBB, DL, maskReg, AArch64::XZR, pMI).setMIFlag(flag);
-}
-
-bool AArch64PACStack::hasFrameSetup(const MachineBasicBlock *const pMBB) const {
-  assert(pMBB != nullptr);
-  for (const auto &MBBI : *pMBB)
-    if (MBBI.getFlag(MachineInstr::FrameSetup))
-      return true;
-  return false;
-}
-
-MachineBasicBlock *AArch64PACStack::findFrameSetupBlock(MachineFunction &MF) const {
-  for (auto &MBB : MF)
-    if (hasFrameSetup(&MBB))
-      return &MBB;
-  return nullptr;
 }
 
 MachineInstr *AArch64PACStack::findFrameDestroyStart(MachineBasicBlock &MBB) const {
