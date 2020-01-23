@@ -4,6 +4,8 @@
 @arr = global [10 x i32] zeroinitializer
 
 ; CHECK-LABEL: @test_func
+; CHECK-NOT: pacia
+; CHECK-NOT: pacib
 define i32 @test_func(i32) #0 {
   %2 = icmp slt i32 %0, 100
   br i1 %2, label %3, label %13
