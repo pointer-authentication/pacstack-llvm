@@ -59,7 +59,8 @@ using namespace llvm::PACStack;
 char AArch64PACStack::ID = 0;
 
 bool AArch64PACStack::runOnMachineFunction(MachineFunction &MF) {
-  if (! doPACStack(MF))
+  // Check if PACStack is enabled, and that we spill some stuff
+  if (! needsPACStack(MF))
     return false;
 
   STI = &MF.getSubtarget<AArch64Subtarget>();

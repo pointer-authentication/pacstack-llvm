@@ -2096,8 +2096,6 @@ void AArch64FrameLowering::determineCalleeSaves(MachineFunction &MF,
     }
   }
 
-  if (PACStack::doPACStack(MF))
-    SavedRegs.set(PACStack::CR);
 
   // Calculates the callee saved stack size.
   unsigned CSStackSize = 0;
@@ -2115,6 +2113,9 @@ void AArch64FrameLowering::determineCalleeSaves(MachineFunction &MF,
       windowsRequiresStackProbe(MF, EstimatedStackSize + CSStackSize + 16)) {
     SavedRegs.set(AArch64::FP);
     SavedRegs.set(AArch64::LR);
+
+    if (PACStack::hasPACStackAttribute(MF))
+      SavedRegs.set(PACStack::CR);
   }
 
   LLVM_DEBUG(dbgs() << "*** determineCalleeSaves\nUsed CSRs:";
