@@ -195,7 +195,7 @@ bool AArch64PACStack::instrumentEpilogues(MachineFunction &MF) {
         .setMIFlag(MachineInstr::FrameDestroy)
         ->addRegisterKilled(CR, TRI);
 
-    // Then move to the end of FrameDestory
+    // Then move to the end of FrameDestroy
     do {
       assert(!MI->isReturn());
       MI = MI->getNextNode();
