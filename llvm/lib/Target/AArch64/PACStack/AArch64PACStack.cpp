@@ -140,6 +140,7 @@ bool AArch64PACStack::instrumentPrologue(MachineFunction &MF) {
   }
 
   auto *MBB = MI->getParent();
+  assert(MBB != nullptr);
 
   // First calculate the new aret into LR and leave CR intact
   buildPACIA(*MBB, DL, AArch64::LR, CR, MI)
@@ -155,7 +156,7 @@ bool AArch64PACStack::instrumentPrologue(MachineFunction &MF) {
   //     aret{i} from LR into frame record
 
   // Move through FrameSetup
-  while (MI->getFlag(MachineInstr::FrameSetup)) {
+  while (MI != nullptr && MI->getFlag(MachineInstr::FrameSetup)) {
     // Don't kill LR on store, we need it afterwards
     if (isStore(*MI) && MI->killsRegister(AArch64::LR)) {
       MI->clearRegisterKills(AArch64::LR, TRI);
