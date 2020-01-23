@@ -199,8 +199,7 @@ bool AArch64PACStack::instrumentEpilogues(MachineFunction &MF) {
     do {
       assert(!MI->isReturn());
       MI = MI->getNextNode();
-    } while (MI->getFlag(MachineInstr::FrameDestroy));
-    assert(MI != nullptr);
+    } while (MI != nullptr && MI->getFlag(MachineInstr::FrameDestroy));
 
     // We should now have:
     //    x15 = aret_{i}    Secure
