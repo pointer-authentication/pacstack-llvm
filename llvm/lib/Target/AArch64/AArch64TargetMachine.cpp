@@ -619,6 +619,9 @@ void AArch64PassConfig::addPreEmitPass() {
       TM->getTargetTriple().isOSBinFormatMachO())
     addPass(createAArch64CollectLOHPass());
 
+  // This should go away later once PACStack is stable (only does testing)
+  addPass(createAArch64PACStackPreEmitSanityChecker());
+
   if (PACStack::doDummyPA())
     addPass(createAArch64DummyPA());
 }
