@@ -2113,10 +2113,10 @@ void AArch64FrameLowering::determineCalleeSaves(MachineFunction &MF,
       windowsRequiresStackProbe(MF, EstimatedStackSize + CSStackSize + 16)) {
     SavedRegs.set(AArch64::FP);
     SavedRegs.set(AArch64::LR);
-
-    if (PACStack::hasPACStackAttribute(MF))
-      SavedRegs.set(PACStack::CR);
   }
+
+  if (PACStack::hasPACStackAttribute(MF) && SavedRegs.test(AArch64::LR))
+    SavedRegs.set(PACStack::CR);
 
   LLVM_DEBUG(dbgs() << "*** determineCalleeSaves\nUsed CSRs:";
              for (unsigned Reg
@@ -2178,6 +2178,10 @@ void AArch64FrameLowering::determineCalleeSaves(MachineFunction &MF,
   // instructions.
   AFI->setCalleeSavedStackSize(AlignedCSStackSize);
   AFI->setCalleeSaveStackHasFreeSpace(AlignedCSStackSize != CSStackSize);
+
+  assert((!PACStack::hasPACStackAttribute(MF) ||
+          SavedRegs.test(PACStack::CR) == SavedRegs.test(AArch64::LR)) &&
+         "If LR and CR is saved, then both should be");
 }
 
 bool AArch64FrameLowering::enableStackSlotScavenging(
