@@ -36,12 +36,7 @@ public:
   bool instrumentEpilogues(MachineFunction &MF);
 
 private:
-  inline MachineInstr *replaceSpillOfLr(MachineBasicBlock &MBB, unsigned reg);
-  inline MachineInstr *replaceLoadOfLr(MachineBasicBlock &MBB, unsigned reg);
-  inline bool couldBeFrameSetup(const MachineInstr &pMI);
-
   inline void insertCollisionProtection(MachineBasicBlock &MBB, MachineInstr *pMI, const MachineInstr::MIFlag &flag);
-
   inline MachineInstr *findFrameDestroyStart(MachineBasicBlock &MBB) const;
   inline MachineInstr *findFrameSetupStart(MachineBasicBlock &MBB) const;
 };
@@ -73,54 +68,6 @@ bool AArch64PACStack::runOnMachineFunction(MachineFunction &MF) {
 
 FunctionPass *llvm::createAArch64PACStack() {
   return new AArch64PACStack();
-}
-
-bool AArch64PACStack::couldBeFrameSetup(const MachineInstr &pMI) {
-  if (pMI.getFlag(MachineInstr::FrameDestroy))
-    return false;
-
-  return !pMI.isTerminator();
-}
-
-MachineInstr *AArch64PACStack::replaceSpillOfLr(MachineBasicBlock &MBB, const unsigned reg) {
-  for (auto MBBI = MBB.begin(), E = MBB.end(); MBBI != E && couldBeFrameSetup(*MBBI); ++MBBI) {
-    switch (MBBI->getOpcode()) {
-      default:
-        assert(!MBBI->findRegisterUseOperand(AArch64::LR, true, TRI) && "didn't expect LR use here!!!");
-        break;
-      case AArch64::STRXui:
-      case AArch64::STRXpre:
-      case AArch64::STPXpre:
-      case AArch64::STPXi:
-        if (auto pO = MBBI->findRegisterUseOperand(AArch64::LR, true, TRI)) {
-          assert(!MBBI->findRegisterUseOperand(reg, false, TRI) && "tyring to do double store");
-          pO->setReg(reg);
-          return &*MBBI;
-        }
-    }
-  }
-
-  return nullptr;
-}
-
-MachineInstr *AArch64PACStack::replaceLoadOfLr(MachineBasicBlock &MBB, const unsigned reg) {
-  for (auto &MI : MBB) {
-    switch (MI.getOpcode()) {
-      default:
-        break;
-      case AArch64::LDRXui:
-      case AArch64::LDRXpost:
-      case AArch64::LDPXi:
-      case AArch64::LDPXpost:
-        if (auto pO = MI.findRegisterDefOperand(AArch64::LR, false, TRI)) {
-          //assert(!MI.findRegisterDefOperand(reg, false, TRI) && "tyring to do double load");
-          pO->setReg(reg);
-          return &MI;
-        }
-    }
-  }
-
-  return nullptr;
 }
 
 bool AArch64PACStack::instrumentPrologue(MachineFunction &MF) {
