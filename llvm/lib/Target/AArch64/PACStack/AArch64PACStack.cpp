@@ -49,6 +49,10 @@ using namespace llvm::PACStack;
 
 char AArch64PACStack::ID = 0;
 
+FunctionPass *llvm::createAArch64PACStack() {
+  return new AArch64PACStack();
+}
+
 bool AArch64PACStack::runOnMachineFunction(MachineFunction &MF) {
   // Check if PACStack is enabled, and that we spill some stuff
   if (! needsPACStack(MF))
@@ -64,10 +68,6 @@ bool AArch64PACStack::runOnMachineFunction(MachineFunction &MF) {
   changed |= instrumentEpilogues(MF);
 
   return changed;
-}
-
-FunctionPass *llvm::createAArch64PACStack() {
-  return new AArch64PACStack();
 }
 
 bool AArch64PACStack::instrumentPrologue(MachineFunction &MF) {
