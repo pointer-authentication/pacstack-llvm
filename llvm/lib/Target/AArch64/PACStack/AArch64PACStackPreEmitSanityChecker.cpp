@@ -101,8 +101,9 @@ bool AArch64PACStackPreEmitSanityChecker::sanityCheck(MachineFunction &MF) {
   doSingleCheck(!(foundFrameSetupCR == 0 && foundFrameDestroyCR != 0),
          "found only FrameDestroy stuff!?!");
 
-  doSingleCheck(!(foundFrameDestroyCR == 0 && foundFrameSetupCR != 0),
-         "found only FrameSetup stuff!?!");
+//  This can be okay if we have an exception that always triggers
+//  doSingleCheck(!(foundFrameDestroyCR == 0 && foundFrameSetupCR != 0),
+//         "found only FrameSetup stuff!?!");
 
   if (sanityCheckOk)
     return true;
