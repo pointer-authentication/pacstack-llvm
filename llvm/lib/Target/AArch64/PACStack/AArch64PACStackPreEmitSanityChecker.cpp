@@ -75,6 +75,7 @@ bool AArch64PACStackPreEmitSanityChecker::runOnMachineFunction(MachineFunction &
 }
 
 bool AArch64PACStackPreEmitSanityChecker::sanityCheck(MachineFunction &MF) {
+#ifndef NDEBUG
   int foundFrameSetupLR = 0;
   int foundFrameSetupCR = 0;
   int foundFrameDestroyCR = 0;
@@ -107,5 +108,8 @@ bool AArch64PACStackPreEmitSanityChecker::sanityCheck(MachineFunction &MF) {
     return true;
 
   MF.dump();
+#else
+  llvm_unreachable("This should never be run in release modde");
+#endif
   return false;
 }
