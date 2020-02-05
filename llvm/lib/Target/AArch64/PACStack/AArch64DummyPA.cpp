@@ -31,6 +31,8 @@ public:
 
 private:
   bool convertBasicPAInstr(MachineBasicBlock &MBB, MachineInstr &MI);
+  bool convertSpPAInstr(MachineBasicBlock &MBB, MachineInstr &MI);
+  bool convertRetPAInstr(MachineBasicBlock &MBB, MachineInstr &MI);
 };
 
 }
@@ -65,26 +67,32 @@ bool AArch64DummyPA::runOnMachineFunction(MachineFunction &MF) {
         case AArch64::AUTDB:
           changed = convertBasicPAInstr(MBB, MI) | changed;
           break;
+        case AArch64::PACIASP:
+        case AArch64::PACIBSP:
+        case AArch64::AUTIASP:
+        case AArch64::AUTIBSP:
+          changed = convertSpPAInstr(MBB, MI) | changed;
+          break;
+        case AArch64::RETAA:
+        case AArch64::RETAB:
+          changed = convertRetPAInstr(MBB, MI) | changed;
+          break;
         case AArch64::PACGA:
         case AArch64::PACDZA:
         case AArch64::PACDZB:
         case AArch64::PACIZA:
         case AArch64::PACIZB:
         case AArch64::PACIA1716:
-        case AArch64::PACIASP:
         case AArch64::PACIAZ:
         case AArch64::PACIB1716:
-        case AArch64::PACIBSP:
         case AArch64::PACIBZ:
         case AArch64::AUTDZA:
         case AArch64::AUTDZB:
         case AArch64::AUTIZA:
         case AArch64::AUTIZB:
         case AArch64::AUTIA1716:
-        case AArch64::AUTIASP:
         case AArch64::AUTIAZ:
         case AArch64::AUTIB1716:
-        case AArch64::AUTIBSP:
         case AArch64::AUTIBZ:
           llvm_unreachable("unsupported");
       }
@@ -103,6 +111,58 @@ bool AArch64DummyPA::convertBasicPAInstr(MachineBasicBlock &MBB, MachineInstr &M
   BuildMI(MBB, MI, DL, TII->get(AArch64::EORXri), dst).addReg(dst).addImm(37);
   BuildMI(MBB, MI, DL, TII->get(AArch64::EORXri), dst).addReg(dst).addImm(97);
   BuildMI(MBB, MI, DL, TII->get(AArch64::EORXrs), dst).addReg(dst).addReg(mod).addImm(0);
+
+  MI.removeFromParent();
+  return true;
+}
+
+bool AArch64DummyPA::convertSpPAInstr(MachineBasicBlock &MBB, MachineInstr &MI) {
+  const auto &DL = MI.getDebugLoc();
+  auto dst = MI.getOperand(0).getReg();
+  auto mod = AArch64::X15;
+
+  if (!(MI.getFlag(MachineInstr::FrameDestroy) || MI.getFlag(MachineInstr::FrameSetup)))
+    llvm_unreachable("dummy conversion of SP variants only supported in FrameSetup or FrameDestroy");
+
+  assert(MI.getOpcode() == AArch64::PACIASP ||
+         MI.getOpcode() == AArch64::PACIBSP ||
+         MI.getOpcode() == AArch64::AUTIASP ||
+         MI.getOpcode() == AArch64::AUTIBSP);
+
+  BuildMI(*MI.getParent(), MI, DL, TII->get(AArch64::ADDXri), mod)
+          .addUse(AArch64::SP)
+          .addImm(0)
+          .addImm(0);
+
+  BuildMI(MBB, MI, DL, TII->get(AArch64::EORXri), dst).addReg(dst).addImm(17);
+  BuildMI(MBB, MI, DL, TII->get(AArch64::EORXri), dst).addReg(dst).addImm(37);
+  BuildMI(MBB, MI, DL, TII->get(AArch64::EORXri), dst).addReg(dst).addImm(97);
+  BuildMI(MBB, MI, DL, TII->get(AArch64::EORXrs), dst).addReg(dst).addReg(mod).addImm(0);
+
+  MI.removeFromParent();
+  return true;
+}
+
+bool AArch64DummyPA::convertRetPAInstr(MachineBasicBlock &MBB, MachineInstr &MI) {
+  const auto &DL = MI.getDebugLoc();
+  auto dst = AArch64::LR;
+  auto mod = AArch64::X15;
+
+  assert(MI.getOpcode() == AArch64::RETAA ||
+         MI.getOpcode() == AArch64::RETAB);
+
+  BuildMI(*MI.getParent(), MI, DL, TII->get(AArch64::ADDXri), mod)
+          .addUse(AArch64::SP)
+          .addImm(0)
+          .addImm(0);
+
+  BuildMI(MBB, MI, DL, TII->get(AArch64::EORXri), dst).addReg(dst).addImm(17);
+  BuildMI(MBB, MI, DL, TII->get(AArch64::EORXri), dst).addReg(dst).addImm(37);
+  BuildMI(MBB, MI, DL, TII->get(AArch64::EORXri), dst).addReg(dst).addImm(97);
+  BuildMI(MBB, MI, DL, TII->get(AArch64::EORXrs), dst).addReg(dst).addReg(mod).addImm(0);
+
+  BuildMI(MBB, MI, DL, TII->get(AArch64::RET))
+          .addReg(AArch64::LR, RegState::Undef);
 
   MI.removeFromParent();
   return true;
