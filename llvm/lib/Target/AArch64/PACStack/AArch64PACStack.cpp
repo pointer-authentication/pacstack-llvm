@@ -82,11 +82,6 @@ bool AArch64PACStack::instrumentPrologue(MachineFunction &MF) {
     if (MI == nullptr)
       continue;
 
-    // First calculate the new aret into LR and leave CR intact
-    buildPACIA(MBB, DL, AArch64::LR, CR, MI)
-        .setMIFlag(MachineInstr::FrameSetup);
-    if (doPACStackMasking(MF))
-      insertCollisionProtection(MBB, MI, MachineInstr::FrameSetup);
 
     // We should now have:
     //    x28 = aret_{i-1}  From stack
@@ -104,6 +99,12 @@ bool AArch64PACStack::instrumentPrologue(MachineFunction &MF) {
 
       MI = MI->getNextNode();
     }
+
+    // First calculate the new aret into LR and leave CR intact
+    buildPACIA(MBB, DL, AArch64::LR, CR, MI)
+            .setMIFlag(MachineInstr::FrameSetup);
+    if (doPACStackMasking(MF))
+      insertCollisionProtection(MBB, MI, MachineInstr::FrameSetup);
 
     // Then, at end of FrameSetup, move aret_{i} to CR from LR
     buildMOV(MBB, DL, CR, AArch64::LR, MI)
