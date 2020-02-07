@@ -137,7 +137,7 @@ bool AArch64PACStack::instrumentEpilogues(MachineFunction &MF) {
     if (MI == nullptr)
       continue;
 
-    // STore aret{i} in x15 before FrameDestroy
+    // Store aret{i} in x15 before FrameDestroy
     buildMOV(MBB, DL, AArch64::X15, CR, MI)
         .setMIFlag(MachineInstr::FrameDestroy)
         ->addRegisterKilled(CR, TRI);
