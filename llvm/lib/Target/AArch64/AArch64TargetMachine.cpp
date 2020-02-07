@@ -591,8 +591,6 @@ void AArch64PassConfig::addPreSched2() {
     if (EnableFalkorHWPFFix)
       addPass(createFalkorHWPFFixPass());
   }
-
-  addPass(createAArch64PACStack());
 }
 
 void AArch64PassConfig::addPreEmitPass() {
@@ -618,9 +616,6 @@ void AArch64PassConfig::addPreEmitPass() {
   if (TM->getOptLevel() != CodeGenOpt::None && EnableCollectLOH &&
       TM->getTargetTriple().isOSBinFormatMachO())
     addPass(createAArch64CollectLOHPass());
-
-  // This should go away later once PACStack is stable (only does testing)
-  addPass(createAArch64PACStackPreEmitSanityChecker());
 
   if (PACStack::doDummyPA())
     addPass(createAArch64DummyPA());

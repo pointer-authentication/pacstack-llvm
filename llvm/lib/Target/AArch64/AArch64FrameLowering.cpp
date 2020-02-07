@@ -97,7 +97,6 @@
 #include "AArch64Subtarget.h"
 #include "AArch64TargetMachine.h"
 #include "MCTargetDesc/AArch64AddressingModes.h"
-#include "PACStack/AArch64PACStack.h"
 #include "llvm/ADT/ScopeExit.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/Statistic.h"
@@ -838,6 +837,8 @@ void AArch64FrameLowering::emitPrologue(MachineFunction &MF,
         .setMIFlags(MachineInstr::FrameSetup);
   }
 
+  auto PACStackCleanup = make_scope_exit([&] { PACStackPostFrameSetup(MBB, MBBI, DL); });
+
   // All calls are tail calls in GHC calling conv, and functions have no
   // prologue/epilogue.
   if (MF.getFunction().getCallingConv() == CallingConv::GHC)
@@ -1342,6 +1343,8 @@ void AArch64FrameLowering::emitEpilogue(MachineFunction &MF,
   // it as the 2nd argument of AArch64ISD::TC_RETURN.
 
   auto Cleanup = make_scope_exit([&] { InsertReturnAddressAuth(MF, MBB); });
+
+  auto PACStackCleanup = make_scope_exit([&] { PACStackPostFrameDestroy(MBB); });
 
   bool IsWin64 =
       Subtarget.isCallingConvWin64(MF.getFunction().getCallingConv());
@@ -2115,8 +2118,13 @@ void AArch64FrameLowering::determineCalleeSaves(MachineFunction &MF,
     SavedRegs.set(AArch64::LR);
   }
 
-  if (PACStack::hasPACStackAttribute(MF) && SavedRegs.test(AArch64::LR))
-    SavedRegs.set(PACStack::CR);
+  // Make sure we always store the PACStack chain register when LR is spilled
+  const Function &F = MF.getFunction();
+  if (F.hasFnAttribute("pacstack") &&
+      F.getFnAttribute("pacstack").getValueAsString() != "none" &&
+      SavedRegs.test(AArch64::LR)) {
+    SavedRegs.set(AArch64::X28);
+  }
 
   LLVM_DEBUG(dbgs() << "*** determineCalleeSaves\nUsed CSRs:";
              for (unsigned Reg
@@ -2179,8 +2187,9 @@ void AArch64FrameLowering::determineCalleeSaves(MachineFunction &MF,
   AFI->setCalleeSavedStackSize(AlignedCSStackSize);
   AFI->setCalleeSaveStackHasFreeSpace(AlignedCSStackSize != CSStackSize);
 
-  assert((!PACStack::hasPACStackAttribute(MF) ||
-          SavedRegs.test(PACStack::CR) == SavedRegs.test(AArch64::LR)) &&
+  assert((!F.hasFnAttribute("pacstack") ||
+          F.getFnAttribute("pacstack").getValueAsString() == "none" ||
+          SavedRegs.test(AArch64::X28) == SavedRegs.test(AArch64::LR)) &&
          "If LR and CR is saved, then both should be");
 }
 
@@ -2253,4 +2262,152 @@ unsigned AArch64FrameLowering::getWinEHFuncletFrameSize(
   // This is the amount of stack a funclet needs to allocate.
   return alignTo(CSSize + MF.getFrameInfo().getMaxCallFrameSize(),
                  getStackAlignment());
+}
+
+inline void AArch64FrameLowering::insertCollisionProtection(MachineBasicBlock &MBB,
+                                                            MachineBasicBlock::iterator &MBBI,
+                                                            const DebugLoc &DL,
+                                                            const MachineInstr::MIFlag &flag) const {
+  const MachineFunction *MF = MBB.getParent();
+  const auto &Subtarget = MF->getSubtarget<AArch64Subtarget>();
+  const TargetInstrInfo *TII = Subtarget.getInstrInfo();
+
+  // MOV X15 <- XZR
+  (MBBI == MBB.end()
+   ? BuildMI(&MBB, DL, TII->get(AArch64::ORRXrs))
+   : BuildMI(MBB, MBBI, DL, TII->get(AArch64::ORRXrs)))
+          .addReg(AArch64::X15, RegState::Define) .addUse(AArch64::XZR)
+          .addUse(AArch64::XZR).addImm(0)
+          .setMIFlag(flag);
+  // X15 <- PACIA X15, X28
+  (MBBI == MBB.end()
+   ? BuildMI(&MBB, DL, TII->get(AArch64::PACIA))
+   : BuildMI(MBB, MBBI, DL, TII->get(AArch64::PACIA)))
+            .addReg(AArch64::X15, RegState::Define)
+            .addUse(AArch64::X28)
+            .setMIFlag(flag);
+  // LR <- EOR LR, mask
+  (MBBI == MBB.end()
+   ? BuildMI(&MBB, DL, TII->get(AArch64::EORXrs))
+   : BuildMI(MBB, MBBI, DL, TII->get(AArch64::EORXrs)))
+            .addReg(AArch64::LR, RegState::Define)
+            .addReg(AArch64::LR)
+            .addReg(AArch64::X15).addImm(0)
+            .setMIFlag(flag);
+  // MOV X15 <- XZR
+  (MBBI == MBB.end()
+   ? BuildMI(&MBB, DL, TII->get(AArch64::ORRXrs))
+   : BuildMI(MBB, MBBI, DL, TII->get(AArch64::ORRXrs)))
+          .addReg(AArch64::X15, RegState::Define) .addUse(AArch64::XZR)
+          .addUse(AArch64::XZR).addImm(0)
+          .setMIFlag(flag);
+}
+
+
+inline void AArch64FrameLowering::PACStackPostFrameSetup(MachineBasicBlock &MBB,
+                                                         MachineBasicBlock::iterator &MBBI,
+                                                         const DebugLoc &DL) const {
+  const MachineFunction *MF = MBB.getParent();
+  const Function &F = MF->getFunction();
+  const auto &Subtarget = MF->getSubtarget<AArch64Subtarget>();
+  const TargetInstrInfo *TII = Subtarget.getInstrInfo();
+  const AArch64RegisterInfo &TRI = *Subtarget.getRegisterInfo();
+
+  if (!needsPACStack(MF)) return;
+
+  // Don't kill LR on store in FrameSetup
+  for (MachineInstr *MI = &*MBBI; MI != nullptr && MI->getFlag(MachineInstr::FrameSetup); MI = MI->getPrevNode()) {
+    switch(MI->getOpcode()) {
+      default:
+        break;
+      case AArch64::STRXui:
+      case AArch64::STRXpre:
+      case AArch64::STPXpre:
+      case AArch64::STPXi:
+        if (MI->killsRegister(AArch64::LR))
+          MI->clearRegisterKills(AArch64::LR, &TRI);
+    }
+  }
+
+  // LR <- PACIA LR, X28
+  (MBBI == MBB.end()
+   ? BuildMI(&MBB, DL, TII->get(AArch64::PACIA))
+   : BuildMI(MBB, MBBI, DL, TII->get(AArch64::PACIA)))
+           .addReg(AArch64::LR, RegState::Define)
+           .addUse(AArch64::X28)
+           .setMIFlag(MachineInstr::FrameSetup);
+
+  // Add collision protection / masking
+  if (F.hasFnAttribute("pacstack") &&F.getFnAttribute("pacstack").getValueAsString() == "full")
+    insertCollisionProtection(MBB, MBBI, DL, MachineInstr::FrameSetup);
+
+  // MOV X28 <- LR
+  (MBBI == MBB.end()
+   ? BuildMI(&MBB, DL, TII->get(AArch64::ORRXrs))
+   : BuildMI(MBB, MBBI, DL, TII->get(AArch64::ORRXrs)))
+          .addReg(AArch64::X28, RegState::Define).addUse(AArch64::XZR)
+          .addUse(AArch64::LR).addImm(0)
+          .setMIFlag(MachineInstr::FrameSetup)
+          ->addRegisterKilled(AArch64::LR, &TRI);
+}
+
+inline void AArch64FrameLowering::PACStackPostFrameDestroy(MachineBasicBlock &MBB) const {
+  const MachineFunction *MF = MBB.getParent();
+  const Function &F = MF->getFunction();
+  const auto &Subtarget = MF->getSubtarget<AArch64Subtarget>();
+  const TargetInstrInfo *TII = Subtarget.getInstrInfo();
+  const AArch64RegisterInfo &TRI = *Subtarget.getRegisterInfo();
+
+  if (!needsPACStack(MF)) return;
+
+  MachineBasicBlock::iterator firstTerminator = MBB.getFirstTerminator();
+  MachineBasicBlock::iterator MBBI = firstTerminator;
+
+  DebugLoc DL;
+
+  // Find where X28 is loaded
+  for (MBBI = firstTerminator; MBBI != MBB.begin() && !MBBI->definesRegister(AArch64::X28); --MBBI);
+  // MOV LR <- X28
+  BuildMI(MBB, MBBI, MBBI->getDebugLoc(), TII->get(AArch64::ORRXrs))
+          .addReg(AArch64::LR, RegState::Define).addUse(AArch64::XZR)
+          .addUse(AArch64::X28).addImm(0)
+          .setMIFlag(MachineInstr::FrameDestroy)
+          ->addRegisterKilled(AArch64::X28, &TRI);
+
+  // Find where LR is loaded from the stack and just throw it away, into X15, I guess :(
+  for (MBBI = firstTerminator; MBBI != MBB.begin() && !MBBI->definesRegister(AArch64::LR); --MBBI);
+  MachineOperand *op = MBBI->findRegisterDefOperand(AArch64::LR);
+  assert(op != nullptr && "we expect to always find this");
+  op->setReg(AArch64::X15);
+
+  // Go back to the first terminator;
+  MBBI = firstTerminator;
+
+  // Add collision protection / masking
+  if (F.hasFnAttribute("pacstack") &&F.getFnAttribute("pacstack").getValueAsString() == "full")
+    insertCollisionProtection(MBB, MBBI, DL, MachineInstr::FrameDestroy);
+
+  BuildMI(MBB, MBBI, MBBI->getDebugLoc(), TII->get(AArch64::AUTIA))
+          .addReg(AArch64::LR, RegState::Define)
+          .addUse(AArch64::X28)
+          .setMIFlag(MachineInstr::FrameDestroy);
+}
+
+bool AArch64FrameLowering::needsPACStack(const MachineFunction *MF) const {
+  const Function &F = MF->getFunction();
+
+  if (!F.hasFnAttribute("pacstack"))
+    return false;
+
+  if (F.getFnAttribute("pacstack").getValueAsString() == "none")
+    return false;
+
+  for (const auto &Info : MF->getFrameInfo().getCalleeSavedInfo()) {
+    const auto r = Info.getReg();
+    if (r == AArch64::LR || r == AArch64::X28) {
+      return true;
+    }
+  }
+
+  return false;
 }
