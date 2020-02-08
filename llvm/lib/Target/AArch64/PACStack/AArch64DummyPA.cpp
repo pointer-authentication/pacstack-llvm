@@ -33,8 +33,10 @@ private:
   bool convertBasicPAInstr(MachineBasicBlock &MBB, MachineInstr &MI);
   bool convertSpPAInstr(MachineBasicBlock &MBB, MachineInstr &MI);
   bool convertRetPAInstr(MachineBasicBlock &MBB, MachineInstr &MI);
+  void insertEmulatedTimings(MachineBasicBlock &MBB, MachineInstr &MI,
+                             unsigned dst, unsigned mod);
+  void fixupHack(MachineBasicBlock &MBB, MachineInstr &MI);
 };
-
 }
 
 char AArch64DummyPA::ID = 0;
@@ -103,14 +105,12 @@ bool AArch64DummyPA::runOnMachineFunction(MachineFunction &MF) {
 }
 
 bool AArch64DummyPA::convertBasicPAInstr(MachineBasicBlock &MBB, MachineInstr &MI) {
-  const auto &DL = MI.getDebugLoc();
   auto dst = MI.getOperand(0).getReg();
   auto mod = MI.getOperand(1).getReg();
 
-  BuildMI(MBB, MI, DL, TII->get(AArch64::EORXri), dst).addReg(dst).addImm(17);
-  BuildMI(MBB, MI, DL, TII->get(AArch64::EORXri), dst).addReg(dst).addImm(37);
-  BuildMI(MBB, MI, DL, TII->get(AArch64::EORXri), dst).addReg(dst).addImm(97);
-  BuildMI(MBB, MI, DL, TII->get(AArch64::EORXrs), dst).addReg(dst).addReg(mod).addImm(0);
+  insertEmulatedTimings(MBB, MI, dst, mod);
+
+  fixupHack(MBB, MI);
 
   MI.removeFromParent();
   return true;
@@ -134,10 +134,7 @@ bool AArch64DummyPA::convertSpPAInstr(MachineBasicBlock &MBB, MachineInstr &MI) 
           .addImm(0)
           .addImm(0);
 
-  BuildMI(MBB, MI, DL, TII->get(AArch64::EORXri), dst).addReg(dst).addImm(17);
-  BuildMI(MBB, MI, DL, TII->get(AArch64::EORXri), dst).addReg(dst).addImm(37);
-  BuildMI(MBB, MI, DL, TII->get(AArch64::EORXri), dst).addReg(dst).addImm(97);
-  BuildMI(MBB, MI, DL, TII->get(AArch64::EORXrs), dst).addReg(dst).addReg(mod).addImm(0);
+  insertEmulatedTimings(MBB, MI, dst, mod);
 
   MI.removeFromParent();
   return true;
@@ -156,10 +153,7 @@ bool AArch64DummyPA::convertRetPAInstr(MachineBasicBlock &MBB, MachineInstr &MI)
           .addImm(0)
           .addImm(0);
 
-  BuildMI(MBB, MI, DL, TII->get(AArch64::EORXri), dst).addReg(dst).addImm(17);
-  BuildMI(MBB, MI, DL, TII->get(AArch64::EORXri), dst).addReg(dst).addImm(37);
-  BuildMI(MBB, MI, DL, TII->get(AArch64::EORXri), dst).addReg(dst).addImm(97);
-  BuildMI(MBB, MI, DL, TII->get(AArch64::EORXrs), dst).addReg(dst).addReg(mod).addImm(0);
+  insertEmulatedTimings(MBB, MI, dst, mod);
 
   BuildMI(MBB, MI, DL, TII->get(AArch64::RET))
           .addReg(AArch64::LR, RegState::Undef);
@@ -167,3 +161,60 @@ bool AArch64DummyPA::convertRetPAInstr(MachineBasicBlock &MBB, MachineInstr &MI)
   MI.removeFromParent();
   return true;
 }
+
+void AArch64DummyPA::fixupHack(MachineBasicBlock &MBB,
+                               MachineInstr &MI) {
+  switch(MI.getOpcode()) {
+    default:
+      return;
+    case AArch64::PACIA:
+    case AArch64::PACIB:
+    case AArch64::PACDA:
+    case AArch64::PACDB:
+      for (auto MBBI = MI.getReverseIterator(); MBBI != MBB.rend(); ++MBBI) {
+        switch(MBBI->getOpcode()) {
+          case AArch64::STRXui:
+          case AArch64::STRXpre:
+          case AArch64::STPXpre:
+          case AArch64::STPXi:
+            if (MBBI->killsRegister(AArch64::LR)) {
+              MBBI->clearRegisterKills(AArch64::LR, TRI);
+            }
+        }
+      }
+  }
+}
+
+void AArch64DummyPA::insertEmulatedTimings(MachineBasicBlock &MBB,
+                                           MachineInstr &MI,
+                                           unsigned dst, unsigned mod) {
+  DebugLoc DL = MI.getDebugLoc();
+
+  auto &dummy1 = BuildMI(MBB, MI, DL, TII->get(AArch64::EORXri))
+      .addDef(dst)
+      .addReg(dst).addImm(17);
+  auto &dummy2 = BuildMI(MBB, MI, DL, TII->get(AArch64::EORXri))
+      .addDef(dst)
+      .addUse(dst).addImm(37);
+  auto &dummy3 = BuildMI(MBB, MI, DL, TII->get(AArch64::EORXri))
+      .addDef(dst)
+      .addUse(dst).addImm(97);
+  auto &dummy4 = BuildMI(MBB, MI, DL, TII->get(AArch64::EORXrs))
+      .addDef(dst)
+      .addUse(dst).addReg(mod).addImm(0);
+
+  if (MI.getFlag(MachineInstr::FrameDestroy)) {
+    dummy1.setMIFlag(MachineInstr::FrameDestroy);
+    dummy2.setMIFlag(MachineInstr::FrameDestroy);
+    dummy3.setMIFlag(MachineInstr::FrameDestroy);
+    dummy4.setMIFlag(MachineInstr::FrameDestroy);
+  }
+
+  if (MI.getFlag(MachineInstr::FrameSetup)) {
+    dummy1.setMIFlag(MachineInstr::FrameSetup);
+    dummy2.setMIFlag(MachineInstr::FrameSetup);
+    dummy3.setMIFlag(MachineInstr::FrameSetup);
+    dummy4.setMIFlag(MachineInstr::FrameSetup);
+  }
+}
+

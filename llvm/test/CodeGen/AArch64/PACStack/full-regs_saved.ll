@@ -4,7 +4,6 @@
 ; CHECK-LABEL: @regs_saved_x30
 ; CHECK-DAG: st{{.*}}x30
 ; CHECK: bl func1
-; CHECK-DAG: ld{{.*}}x30
 ; CHECK: ret
 define void @regs_saved_x30() #0 {
   call void @func1()

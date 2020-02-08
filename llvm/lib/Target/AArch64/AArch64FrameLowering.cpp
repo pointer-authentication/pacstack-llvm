@@ -2315,17 +2315,19 @@ inline void AArch64FrameLowering::PACStackPostFrameSetup(MachineBasicBlock &MBB,
 
   if (!needsPACStack(MF)) return;
 
-  // Don't kill LR on store in FrameSetup
-  for (MachineInstr *MI = &*MBBI; MI != nullptr && MI->getFlag(MachineInstr::FrameSetup); MI = MI->getPrevNode()) {
-    switch(MI->getOpcode()) {
-      default:
-        break;
+  // Don't kill LR or X28 on store in FrameSetup
+  for (auto str = MBBI->getReverseIterator(); str != MBB.rend(); ++str) {
+    switch(str->getOpcode()) {
       case AArch64::STRXui:
       case AArch64::STRXpre:
       case AArch64::STPXpre:
       case AArch64::STPXi:
-        if (MI->killsRegister(AArch64::LR))
-          MI->clearRegisterKills(AArch64::LR, &TRI);
+        if (str->killsRegister(AArch64::LR)) {
+          str->clearRegisterKills(AArch64::LR, &TRI);
+        }
+        if (str->killsRegister(AArch64::X28)) {
+          str->clearRegisterKills(AArch64::X28, &TRI);
+        }
     }
   }
 
@@ -2333,9 +2335,9 @@ inline void AArch64FrameLowering::PACStackPostFrameSetup(MachineBasicBlock &MBB,
   (MBBI == MBB.end()
    ? BuildMI(&MBB, DL, TII->get(AArch64::PACIA))
    : BuildMI(MBB, MBBI, DL, TII->get(AArch64::PACIA)))
-           .addReg(AArch64::LR, RegState::Define)
-           .addUse(AArch64::X28)
-           .setMIFlag(MachineInstr::FrameSetup);
+      .addReg(AArch64::LR, RegState::Define)
+      .addUse(AArch64::X28)
+      .setMIFlag(MachineInstr::FrameSetup);
 
   // Add collision protection / masking
   if (F.hasFnAttribute("pacstack") &&F.getFnAttribute("pacstack").getValueAsString() == "full")
@@ -2345,10 +2347,10 @@ inline void AArch64FrameLowering::PACStackPostFrameSetup(MachineBasicBlock &MBB,
   (MBBI == MBB.end()
    ? BuildMI(&MBB, DL, TII->get(AArch64::ORRXrs))
    : BuildMI(MBB, MBBI, DL, TII->get(AArch64::ORRXrs)))
-          .addReg(AArch64::X28, RegState::Define).addUse(AArch64::XZR)
-          .addUse(AArch64::LR).addImm(0)
-          .setMIFlag(MachineInstr::FrameSetup)
-          ->addRegisterKilled(AArch64::LR, &TRI);
+      .addReg(AArch64::X28, RegState::Define).addUse(AArch64::XZR)
+      .addUse(AArch64::LR).addImm(0)
+      .setMIFlag(MachineInstr::FrameSetup)
+      ->addRegisterKilled(AArch64::LR, &TRI);
 }
 
 inline void AArch64FrameLowering::PACStackPostFrameDestroy(MachineBasicBlock &MBB) const {
@@ -2360,34 +2362,38 @@ inline void AArch64FrameLowering::PACStackPostFrameDestroy(MachineBasicBlock &MB
 
   if (!needsPACStack(MF)) return;
 
-  MachineBasicBlock::iterator firstTerminator = MBB.getFirstTerminator();
-  MachineBasicBlock::iterator MBBI = firstTerminator;
+  MachineBasicBlock::iterator MBBI = MBB.getFirstTerminator();
+  MachineBasicBlock::reverse_iterator rMBBI;
 
   DebugLoc DL;
 
+  // Find where LR is loaded from the stack and just throw it away, into X15, I guess :(
+  // FIXME: This load should be completely eliminated! (but the pair must stay)
+  for (rMBBI = MBBI->getReverseIterator();
+       rMBBI != MBB.rend() && !rMBBI->definesRegister(AArch64::LR);
+       ++rMBBI);
+  MachineOperand *op = rMBBI->findRegisterDefOperand(AArch64::LR);
+  assert(op != nullptr && "we expect to always find this");
+  op->setReg(AArch64::X15);
+
   // Find where X28 is loaded
-  for (MBBI = firstTerminator; MBBI != MBB.begin() && !MBBI->definesRegister(AArch64::X28); --MBBI);
+  for (rMBBI = MBBI->getReverseIterator();
+       rMBBI != MBB.rend() && !rMBBI->definesRegister(AArch64::X28);
+      ++rMBBI);
   // MOV LR <- X28
-  BuildMI(MBB, MBBI, MBBI->getDebugLoc(), TII->get(AArch64::ORRXrs))
+  BuildMI(MBB, rMBBI->getIterator(), MBBI->getDebugLoc(), TII->get(AArch64::ORRXrs))
           .addReg(AArch64::LR, RegState::Define).addUse(AArch64::XZR)
           .addUse(AArch64::X28).addImm(0)
           .setMIFlag(MachineInstr::FrameDestroy)
           ->addRegisterKilled(AArch64::X28, &TRI);
 
-  // Find where LR is loaded from the stack and just throw it away, into X15, I guess :(
-  for (MBBI = firstTerminator; MBBI != MBB.begin() && !MBBI->definesRegister(AArch64::LR); --MBBI);
-  MachineOperand *op = MBBI->findRegisterDefOperand(AArch64::LR);
-  assert(op != nullptr && "we expect to always find this");
-  op->setReg(AArch64::X15);
-
-  // Go back to the first terminator;
-  MBBI = firstTerminator;
-
   // Add collision protection / masking
   if (F.hasFnAttribute("pacstack") &&F.getFnAttribute("pacstack").getValueAsString() == "full")
     insertCollisionProtection(MBB, MBBI, DL, MachineInstr::FrameDestroy);
 
-  BuildMI(MBB, MBBI, MBBI->getDebugLoc(), TII->get(AArch64::AUTIA))
+  (MBBI == MBB.end()
+   ? BuildMI(&MBB, DL, TII->get(AArch64::AUTIA))
+   : BuildMI(MBB, MBBI, MBBI->getDebugLoc(), TII->get(AArch64::AUTIA)))
           .addReg(AArch64::LR, RegState::Define)
           .addUse(AArch64::X28)
           .setMIFlag(MachineInstr::FrameDestroy);

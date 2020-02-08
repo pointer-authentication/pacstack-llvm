@@ -1,22 +1,15 @@
 ; RUN: llc -aarch64-pacstack-ir-pass -pacstack=full -mtriple=aarch64-none-linux-gnu -mattr=v8.3a -verify-machineinstrs < %s | FileCheck %s
 
-; CHECK-LABEL: @StopStopwatch
-; CHECK-DAG: pacia  x30, x28
-; CHECK-DAG: mov x15, xzr
-; CHECK: pacia x15, x28
-; CHECK: eor x30, x30, x15
-; CHECK-DAG: st{{.*}}x30
-; CHECK-DAG: st{{.*}}x28
-; CHECK: mov x28, x30
+; Make sure XR is stashed in X15 before the old one is loaded
+;
+; CHECK-LABEL: @StopStopwatch_1
 ; CHECK: bl clock
-; CHECK: mov x15, x28
+; CHECK: mov x30, x28
 ; CHECK: ld{{.*}}x28
 ; CHECK: pacia x15, x28
-; CHECK: eor x30, x30, x15
-; CHECK-DAG: mov x15, xzr
-; CHECK-DAG: autia x30, x28
+; CHECK: autia x30, x28
 ; CHECK: ret
-define hidden i64 @StopStopwatch(i64 %startticks) local_unnamed_addr #3 {
+define hidden i64 @StopStopwatch_1(i64 %startticks) local_unnamed_addr #3 {
 entry:
   %call = tail call i64 @clock() #10
   %sub = sub i64 %call, %startticks

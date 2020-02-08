@@ -16,7 +16,7 @@
 ; CHECK-NOT: pacia
 ; CHECK: bl
 ; CHECK-NOT: pacia
-; CHECK: mov x15, x28
+; CHECK: mov x30, x28
 ; CHECK: ld
 ; CHECK: mov x15, xzr
 ; CHECK: eor x15

@@ -54,6 +54,7 @@ FunctionPass *llvm::createAArch64PACStack() {
 }
 
 bool AArch64PACStack::runOnMachineFunction(MachineFunction &MF) {
+  llvm_unreachable("kill me now"); // FIXME: Just remove this!
   // Check if PACStack is enabled, and that we spill some stuff
   if (! needsPACStack(MF))
     return false;
