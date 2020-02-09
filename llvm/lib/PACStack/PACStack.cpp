@@ -26,22 +26,26 @@ static cl::opt<PACStackType> PACStackTypeOpt(
     "pacstack", cl::init(PACStackNone),
     cl::desc("PACStack"),
     cl::value_desc("mode"),
-    cl::values(clEnumValN(PACStackNone, "none", "Disable PACStack"),
-               clEnumValN(PACStackFull, "full", "Full PACStack with masking"),
-               clEnumValN(PACStackNoMask, "nomask", "PACStack without masking")
+    cl::values(
+        clEnumValN(PACStackNone, "none", "Disable PACStack"),
+        clEnumValN(PACStackFull, "full", "Full PACStack with masking"),
+        clEnumValN(PACStackNoMask, "nomask", "PACStack without masking")
     ));
 
-static cl::opt<bool>
-    EnableAArch64IRPass("aarch64-pacstack-ir-pass", cl::Hidden,
-                        cl::desc("Do the PACStack IR Pass in target"),
-                        cl::init(false));
+static cl::opt<bool> EnableAArch64IRPass(
+    "aarch64-pacstack-ir-pass",
+    cl::Hidden,
+    cl::desc("(obsolete, no longer needed)"),
+    cl::init(false));
 
 static cl::opt<bool>
     EnableAArch64DummyPA("aarch64-pacstack-dummy-pa", cl::Hidden,
                          cl::desc("Replace PACStack PA to the PA analog"),
                          cl::init(false));
 
-bool llvm::PACStack::doAArch64IRPass() { return EnableAArch64IRPass; }
+bool llvm::PACStack::doAArch64IRPass() {
+  return PACStackTypeOpt != PACStackNone;
+}
 bool llvm::PACStack::doDummyPA() { return EnableAArch64DummyPA; }
 
 #define DEBUG_TYPE "PACStack"

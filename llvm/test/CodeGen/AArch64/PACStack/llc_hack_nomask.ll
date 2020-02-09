@@ -1,4 +1,4 @@
-; RUN: llc -aarch64-pacstack-ir-pass -pacstack=nomask -mtriple=aarch64-none-linux-gnu -mattr=v8.3a -verify-machineinstrs < %s | FileCheck %s
+; RUN: llc -pacstack=nomask -mtriple=aarch64-none-linux-gnu -mattr=v8.3a -verify-machineinstrs < %s | FileCheck %s
 
 ; CHECK-LABEL: @func2
 ; CHECK: pacia
