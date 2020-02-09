@@ -190,18 +190,18 @@ void AArch64DummyPA::insertEmulatedTimings(MachineBasicBlock &MBB,
                                            unsigned dst, unsigned mod) {
   DebugLoc DL = MI.getDebugLoc();
 
-  auto &dummy1 = BuildMI(MBB, MI, DL, TII->get(AArch64::EORXri))
+  auto &dummy1 = BuildMI(MBB, MI, DL, TII->get(AArch64::EORXrs))
       .addDef(dst)
-      .addReg(dst).addImm(17);
-  auto &dummy2 = BuildMI(MBB, MI, DL, TII->get(AArch64::EORXri))
+      .addUse(dst).addReg(mod).addImm(60);
+  auto &dummy2 = BuildMI(MBB, MI, DL, TII->get(AArch64::EORXrs))
       .addDef(dst)
-      .addUse(dst).addImm(37);
-  auto &dummy3 = BuildMI(MBB, MI, DL, TII->get(AArch64::EORXri))
+      .addUse(dst).addReg(mod).addImm(56);
+  auto &dummy3 = BuildMI(MBB, MI, DL, TII->get(AArch64::EORXrs))
       .addDef(dst)
-      .addUse(dst).addImm(97);
+      .addUse(dst).addReg(mod).addImm(52);
   auto &dummy4 = BuildMI(MBB, MI, DL, TII->get(AArch64::EORXrs))
       .addDef(dst)
-      .addUse(dst).addReg(mod).addImm(0);
+      .addUse(dst).addReg(mod).addImm(48);
 
   if (MI.getFlag(MachineInstr::FrameDestroy)) {
     dummy1.setMIFlag(MachineInstr::FrameDestroy);
