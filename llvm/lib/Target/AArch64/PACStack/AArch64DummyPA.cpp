@@ -190,18 +190,44 @@ void AArch64DummyPA::insertEmulatedTimings(MachineBasicBlock &MBB,
                                            unsigned dst, unsigned mod) {
   DebugLoc DL = MI.getDebugLoc();
 
-  auto &dummy1 = BuildMI(MBB, MI, DL, TII->get(AArch64::EORXrs))
+  bool isAut = true;
+  switch(MI.getOpcode()) {
+    default:
+      break;
+    case AArch64::PACIA:
+    case AArch64::PACIB:
+    case AArch64::PACDA:
+    case AArch64::PACDB:
+    case AArch64::PACIASP:
+    case AArch64::PACIBSP:
+    case AArch64::PACGA:
+    case AArch64::PACDZA:
+    case AArch64::PACDZB:
+    case AArch64::PACIZA:
+    case AArch64::PACIZB:
+    case AArch64::PACIA1716:
+    case AArch64::PACIAZ:
+    case AArch64::PACIB1716:
+    case AArch64::PACIBZ:
+      isAut = false;
+  }
+
+  const MCInstrDesc &MCID = (isAut
+                             ? TII->get(AArch64::EORXrs)
+                             : TII->get(AArch64::EORXrs));
+
+  auto &dummy1 = BuildMI(MBB, MI, DL, MCID)
       .addDef(dst)
-      .addUse(dst).addReg(mod).addImm(60);
-  auto &dummy2 = BuildMI(MBB, MI, DL, TII->get(AArch64::EORXrs))
-      .addDef(dst)
-      .addUse(dst).addReg(mod).addImm(56);
-  auto &dummy3 = BuildMI(MBB, MI, DL, TII->get(AArch64::EORXrs))
+      .addUse(dst).addReg(dst).addImm(48);
+  auto &dummy2 = BuildMI(MBB, MI, DL, MCID)
       .addDef(dst)
       .addUse(dst).addReg(mod).addImm(52);
-  auto &dummy4 = BuildMI(MBB, MI, DL, TII->get(AArch64::EORXrs))
+  auto &dummy3 = BuildMI(MBB, MI, DL, MCID)
       .addDef(dst)
-      .addUse(dst).addReg(mod).addImm(48);
+      .addUse(dst).addReg(mod).addImm(56);
+  auto &dummy4 = BuildMI(MBB, MI, DL, MCID)
+      .addDef(dst)
+      .addUse(dst).addReg(mod).addImm(60);
 
   if (MI.getFlag(MachineInstr::FrameDestroy)) {
     dummy1.setMIFlag(MachineInstr::FrameDestroy);
