@@ -52,17 +52,11 @@ namespace {
 class PACStackOptCallPass : public FunctionPass {
 public:
   static char ID;
-
   PACStackOptCallPass() : FunctionPass(ID) {}
-
   bool runOnFunction(Function &F) override;
-
   void getAnalysisUsage(AnalysisUsage &AU) const override {
     AU.setPreservesCFG();
   }
-
-private:
-  bool insertNeedSpillIntrinsic(Function &F);
 };
 
 }
