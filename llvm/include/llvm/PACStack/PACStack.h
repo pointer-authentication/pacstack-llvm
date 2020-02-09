@@ -27,7 +27,6 @@ enum PACStackType {
 Pass *createPACStackOptCallPass();
 
 bool doAArch64IRPass();
-bool isEnabled();
 bool doDummyPA();
 
 }

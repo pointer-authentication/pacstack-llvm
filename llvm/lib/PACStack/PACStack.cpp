@@ -41,7 +41,6 @@ static cl::opt<bool>
                          cl::desc("Replace PACStack PA to the PA analog"),
                          cl::init(false));
 
-bool llvm::PACStack::isEnabled() { return PACStackTypeOpt != PACStackNone; }
 bool llvm::PACStack::doAArch64IRPass() { return EnableAArch64IRPass; }
 bool llvm::PACStack::doDummyPA() { return EnableAArch64DummyPA; }
 
