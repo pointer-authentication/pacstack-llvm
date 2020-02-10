@@ -2365,16 +2365,11 @@ inline void AArch64FrameLowering::PACStackPostFrameDestroy(MachineBasicBlock &MB
   MachineBasicBlock::iterator MBBI = MBB.getFirstTerminator();
   MachineBasicBlock::reverse_iterator rMBBI;
 
-  // Lets make sure we have an MBBI that points somewhere
-  if (MBBI == MBB.end())
-    MBBI = MBB.getLastNonDebugInstr();
-  assert(MBBI != MBB.end() && "This seems to be an empty MBB!?!");
-
   DebugLoc DL;
 
   // Find where LR is loaded from the stack and just throw it away, into X15, I guess :(
   // FIXME: This load should be completely eliminated! (but the pair must stay)
-  for (rMBBI = MBBI->getReverseIterator();
+  for (rMBBI = (MBBI != MBB.end() ? MBBI->getReverseIterator() : MBB.rbegin());
        rMBBI != MBB.rend() && !rMBBI->definesRegister(AArch64::LR);
        ++rMBBI);
   MachineOperand *op = rMBBI->findRegisterDefOperand(AArch64::LR);
@@ -2382,7 +2377,7 @@ inline void AArch64FrameLowering::PACStackPostFrameDestroy(MachineBasicBlock &MB
   op->setReg(AArch64::X15);
 
   // Find where X28 is loaded
-  for (rMBBI = MBBI->getReverseIterator();
+  for (rMBBI = (MBBI != MBB.end() ? MBBI->getReverseIterator() : MBB.rbegin());
        rMBBI != MBB.rend() && !rMBBI->definesRegister(AArch64::X28);
       ++rMBBI);
   // MOV LR <- X28
