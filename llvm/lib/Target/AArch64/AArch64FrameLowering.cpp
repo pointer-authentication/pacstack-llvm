@@ -2372,10 +2372,6 @@ inline void AArch64FrameLowering::PACStackPostFrameDestroy(MachineBasicBlock &MB
 
   DebugLoc DL;
 
-  rMBBI = MBBI->getReverseIterator();
-  if (rMBBI != MBB.rend())
-    rMBBI->definesRegister(AArch64::X28);
-
   // Find where LR is loaded from the stack and just throw it away, into X15, I guess :(
   // FIXME: This load should be completely eliminated! (but the pair must stay)
   for (rMBBI = MBBI->getReverseIterator();
