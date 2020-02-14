@@ -2315,8 +2315,16 @@ inline void AArch64FrameLowering::PACStackPostFrameSetup(MachineBasicBlock &MBB,
 
   if (!needsPACStack(MF)) return;
 
+  errs() << "end? " << (MBBI == MBB.end()) << "\n";
+  //errs() << "isSentinel?" << MBBI->isSentinel() << "\n";
+  //errs() << "Should get this far at least!\n";
+
+  //assert(!MBBI->isSentinel() && "We're at a sentinel it seems");
+  //assert(MBBI != MBB.end() && "we're at the end, but not at a sentinel?");
+
   // Don't kill LR or X28 on store in FrameSetup
-  for (auto str = MBBI->getReverseIterator(); str != MBB.rend(); ++str) {
+  for (auto str = (MBBI != MBB.end() ? MBBI->getReverseIterator() : MBB.rbegin());
+       str != MBB.rend(); ++str) {
     switch(str->getOpcode()) {
       case AArch64::STRXui:
       case AArch64::STRXpre:
