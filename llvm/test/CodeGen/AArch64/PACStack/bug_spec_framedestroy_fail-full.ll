@@ -38,7 +38,7 @@ attributes #1 = { nounwind }
 
 !0 = !{i32 1, !"wchar_size", i32 4}
 !1 = !{i32 7, !"PIC Level", i32 2}
-!2 = !{!"clang version 9.0.1 (git@version.aalto.fi:platsec/authenticated-shadow-stack/llvm-pafss.git 25e49790b336f0fc834c0c451d6cae7e0c62c6d9)"}
+!2 = !{!"clang version 9.0.1 (PACStack 25e49790b336f0fc834c0c451d6cae7e0c62c6d9)"}
 !3 = !{!4, !5, i64 16}
 !4 = !{!"_MagickMemoryMethods", !5, i64 0, !5, i64 8, !5, i64 16}
 !5 = !{!"any pointer", !6, i64 0}

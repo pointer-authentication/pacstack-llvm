@@ -142,7 +142,7 @@ attributes #0 = { nounwind readonly "pacstack"="full" "correctly-rounded-divide-
 !llvm.ident = !{!1}
 
 !0 = !{i32 1, !"wchar_size", i32 4}
-!1 = !{!"clang version 9.0.1 (git@version.aalto.fi:platsec/authenticated-shadow-stack/llvm-pafss.git 0394b9024511d9931e41dda53918c724c78d61c2)"}
+!1 = !{!"clang version 9.0.1 (PACStack 0394b9024511d9931e41dda53918c724c78d61c2)"}
 !2 = !{!3, !3, i64 0}
 !3 = !{!"omnipotent char", !4, i64 0}
 !4 = !{!"Simple C/C++ TBAA"}

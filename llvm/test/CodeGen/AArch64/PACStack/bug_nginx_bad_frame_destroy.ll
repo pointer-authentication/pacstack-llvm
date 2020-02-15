@@ -219,7 +219,7 @@ attributes #3 = { nounwind }
 !llvm.ident = !{!1}
 
 !0 = !{i32 1, !"wchar_size", i32 4}
-!1 = !{!"clang version 9.0.1 (https://gunnl1:23as7MHyxCmmYG6rSQDB@version.aalto.fi/gitlab/platsec/authenticated-shadow-stack/llvm-pafss d6fb759d072f5fb558b02574f4b967a5f6b1fbf5)"}
+!1 = !{!"clang version 9.0.1 (PACStack d6fb759d072f5fb558b02574f4b967a5f6b1fbf5)"}
 !2 = !{!3, !4, i64 8}
 !3 = !{!"timeval", !4, i64 0, !4, i64 8}
 !4 = !{!"long", !5, i64 0}

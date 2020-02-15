@@ -140,7 +140,7 @@ attributes #4 = { nounwind }
 
 !0 = !{i32 1, !"wchar_size", i32 4}
 !1 = !{i32 7, !"PIC Level", i32 2}
-!2 = !{!"clang version 9.0.1 (/home/ishkamiel/d/llvm/clang 32357e3940eb5b0ba30be8a2da14d04272fb40cb)"}
+!2 = !{!"clang version 9.0.1 (PACStack 32357e3940eb5b0ba30be8a2da14d04272fb40cb)"}
 !3 = !{!4, !10, i64 24}
 !4 = !{!"", !5, i64 0, !8, i64 8, !9, i64 16, !10, i64 24, !8, i64 32}
 !5 = !{!"int", !6, i64 0}
