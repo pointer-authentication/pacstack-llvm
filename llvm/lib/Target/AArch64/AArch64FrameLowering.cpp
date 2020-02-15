@@ -2272,6 +2272,15 @@ inline void AArch64FrameLowering::insertCollisionProtection(MachineBasicBlock &M
   const auto &Subtarget = MF->getSubtarget<AArch64Subtarget>();
   const TargetInstrInfo *TII = Subtarget.getInstrInfo();
 
+  assert(flag != MachineInstr::FrameSetup
+         || std::all_of(MBB.begin(), MBBI, [](MachineBasicBlock::iterator check) {
+    return -1 == check->findRegisterUseOperandIdx(AArch64::X15)
+           && -1 == check->findRegisterDefOperandIdx(AArch64::X15)
+           && !check->killsRegister(AArch64::X15);
+  }) && "Shouldn't be using, defining, or killing X15");
+  assert((flag != MachineInstr::FrameSetup
+          || !MBB.isLiveIn(AArch64::X15)) && "X15 live in FrameSetup MBB");
+
   // MOV X15 <- XZR
   (MBBI == MBB.end()
    ? BuildMI(&MBB, DL, TII->get(AArch64::ORRXrs))
@@ -2315,12 +2324,11 @@ inline void AArch64FrameLowering::PACStackPostFrameSetup(MachineBasicBlock &MBB,
 
   if (!needsPACStack(MF)) return;
 
-  LLVM_DEBUG(for (auto rMBBI = (MBBI != MBB.end() ? MBBI->getReverseIterator() : MBB.rbegin());
-                  rMBBI != MBB.rend(); ++rMBBI) {
-    assert(nullptr == rMBBI->findRegisterUseOperand(AArch64::X15) && "Shouldn't be using X15");
-    assert(nullptr == rMBBI->findRegisterDefOperand(AArch64::X15) && "Shouldn't be killing X15");
-    assert(!rMBBI->killsRegister(AArch64::X15) && "Shouldn't be killing X15");
-  });
+  assert(std::all_of(MBB.begin(), MBBI, [](MachineBasicBlock::iterator check) {
+    return -1 == check->findRegisterUseOperandIdx(AArch64::X15)
+           && -1 == check->findRegisterDefOperandIdx(AArch64::X15)
+           && !check->killsRegister(AArch64::X15);
+  }) && "Shouldn't be using, defining, or killing X15");
 
   // Don't kill LR or X28 on store in FrameSetup
   for (auto str = (MBBI != MBB.end() ? MBBI->getReverseIterator() : MBB.rbegin());
