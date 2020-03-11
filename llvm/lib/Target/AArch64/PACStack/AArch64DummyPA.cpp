@@ -36,6 +36,8 @@ private:
   void insertEmulatedTimings(MachineBasicBlock &MBB, MachineInstr &MI,
                              unsigned dst, unsigned mod);
   void fixupHack(MachineBasicBlock &MBB, MachineInstr &MI);
+
+  inline bool isPAC(MachineInstr &MI);
 };
 }
 
@@ -190,7 +192,61 @@ void AArch64DummyPA::insertEmulatedTimings(MachineBasicBlock &MBB,
                                            unsigned dst, unsigned mod) {
   DebugLoc DL = MI.getDebugLoc();
 
-  bool isAut = true;
+  const MCInstrDesc &MCID = (isPAC(MI)
+                             ? TII->get(AArch64::EORXrs)
+                             : TII->get(AArch64::EORXrs));
+
+  if (MI.getFlag(MachineInstr::FrameDestroy)) {
+    BuildMI(MBB, MI, DL, MCID)
+            .addDef(dst)
+            .addUse(dst).addReg(dst).addImm(48)
+            .setMIFlag(MachineInstr::FrameDestroy);
+    BuildMI(MBB, MI, DL, MCID)
+            .addDef(dst)
+            .addUse(dst).addReg(mod).addImm(52)
+            .setMIFlag(MachineInstr::FrameDestroy);
+    BuildMI(MBB, MI, DL, MCID)
+            .addDef(dst)
+            .addUse(dst).addReg(mod).addImm(56)
+            .setMIFlag(MachineInstr::FrameDestroy);
+    BuildMI(MBB, MI, DL, MCID)
+            .addDef(dst)
+            .addUse(dst).addReg(mod).addImm(60)
+            .setMIFlag(MachineInstr::FrameDestroy);
+  } else if (MI.getFlag(MachineInstr::FrameSetup)) {
+    BuildMI(MBB, MI, DL, MCID)
+            .addDef(dst)
+            .addUse(dst).addReg(dst).addImm(48)
+            .setMIFlag(MachineInstr::FrameSetup);
+    BuildMI(MBB, MI, DL, MCID)
+            .addDef(dst)
+            .addUse(dst).addReg(mod).addImm(52)
+            .setMIFlag(MachineInstr::FrameSetup);
+    BuildMI(MBB, MI, DL, MCID)
+            .addDef(dst)
+            .addUse(dst).addReg(mod).addImm(56)
+            .setMIFlag(MachineInstr::FrameSetup);
+    BuildMI(MBB, MI, DL, MCID)
+            .addDef(dst)
+            .addUse(dst).addReg(mod).addImm(60)
+            .setMIFlag(MachineInstr::FrameSetup);
+  } else  {
+    BuildMI(MBB, MI, DL, MCID)
+            .addDef(dst)
+            .addUse(dst).addReg(dst).addImm(48);
+    BuildMI(MBB, MI, DL, MCID)
+            .addDef(dst)
+            .addUse(dst).addReg(mod).addImm(52);
+    BuildMI(MBB, MI, DL, MCID)
+            .addDef(dst)
+            .addUse(dst).addReg(mod).addImm(56);
+    BuildMI(MBB, MI, DL, MCID)
+            .addDef(dst)
+            .addUse(dst).addReg(mod).addImm(60);
+  }
+}
+
+inline bool AArch64DummyPA::isPAC(MachineInstr &MI) {
   switch(MI.getOpcode()) {
     default:
       break;
@@ -209,38 +265,7 @@ void AArch64DummyPA::insertEmulatedTimings(MachineBasicBlock &MBB,
     case AArch64::PACIAZ:
     case AArch64::PACIB1716:
     case AArch64::PACIBZ:
-      isAut = false;
+      return true;
   }
-
-  const MCInstrDesc &MCID = (isAut
-                             ? TII->get(AArch64::EORXrs)
-                             : TII->get(AArch64::EORXrs));
-
-  auto &dummy1 = BuildMI(MBB, MI, DL, MCID)
-      .addDef(dst)
-      .addUse(dst).addReg(dst).addImm(48);
-  auto &dummy2 = BuildMI(MBB, MI, DL, MCID)
-      .addDef(dst)
-      .addUse(dst).addReg(mod).addImm(52);
-  auto &dummy3 = BuildMI(MBB, MI, DL, MCID)
-      .addDef(dst)
-      .addUse(dst).addReg(mod).addImm(56);
-  auto &dummy4 = BuildMI(MBB, MI, DL, MCID)
-      .addDef(dst)
-      .addUse(dst).addReg(mod).addImm(60);
-
-  if (MI.getFlag(MachineInstr::FrameDestroy)) {
-    dummy1.setMIFlag(MachineInstr::FrameDestroy);
-    dummy2.setMIFlag(MachineInstr::FrameDestroy);
-    dummy3.setMIFlag(MachineInstr::FrameDestroy);
-    dummy4.setMIFlag(MachineInstr::FrameDestroy);
-  }
-
-  if (MI.getFlag(MachineInstr::FrameSetup)) {
-    dummy1.setMIFlag(MachineInstr::FrameSetup);
-    dummy2.setMIFlag(MachineInstr::FrameSetup);
-    dummy3.setMIFlag(MachineInstr::FrameSetup);
-    dummy4.setMIFlag(MachineInstr::FrameSetup);
-  }
+  return false;
 }
-
