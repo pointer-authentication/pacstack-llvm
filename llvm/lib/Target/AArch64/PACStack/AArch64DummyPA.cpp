@@ -112,7 +112,8 @@ bool AArch64DummyPA::convertBasicPAInstr(MachineBasicBlock &MBB, MachineInstr &M
 
   insertEmulatedTimings(MBB, MI, dst, mod);
 
-  fixupHack(MBB, MI);
+  if (MI.getFlag(MachineInstr::FrameSetup))
+    fixupHack(MBB, MI);
 
   MI.removeFromParent();
   return true;
@@ -181,6 +182,7 @@ void AArch64DummyPA::fixupHack(MachineBasicBlock &MBB,
           case AArch64::STPXi:
             if (MBBI->killsRegister(AArch64::LR)) {
               MBBI->clearRegisterKills(AArch64::LR, TRI);
+              return;
             }
         }
       }
