@@ -6,7 +6,7 @@
 ; CHECK: bl clock
 ; CHECK: mov x30, x28
 ; CHECK: ld{{.*}}x28
-; CHECK: pacia x15, x28
+; CHECK: pacia [[tmpReg:x[0-9]+]], x28
 ; CHECK: autia x30, x28
 ; CHECK: ret
 define hidden i64 @StopStopwatch_1(i64 %startticks) local_unnamed_addr #3 {

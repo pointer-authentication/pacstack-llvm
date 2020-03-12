@@ -6,25 +6,25 @@
 ; LR value for return.
 ;
 ;        sub     sp, sp, #48             // =48
-;        mov     x15, xzr
+;        mov     [[tmpReg:x[0-9]+]], xzr
 ;        str     x28, [sp, #16]          // 8-byte Folded Spill
 ;        stp     x29, x30, [sp, #32]     // 16-byte Folded Spill
 ;        pacia   x30, x28
-;        pacia   x15, x28
-;        eor     x30, x30, x15
+;        pacia   [[tmpReg]], x28
+;        eor     x30, x30, [[tmpReg]]
 ;        mov     x0, sp
 ;        mov     x1, xzr
 ;        add     x29, sp, #32            // =32
-;        mov     x15, xzr
+;        mov     [[tmpReg]], xzr
 ;        mov     x28, x30
 ;        bl      gettimeofday
-;        mov     x15, x28
+;        mov     [[tmpReg]], x28
 ;        ldp     x8, x28, [sp, #8]       // 8-byte Folded Reload
-;        mov     x30, x15
-;        mov     x15, xzr
+;        mov     x30, [[tmpReg]]
+;        mov     [[tmpReg]], xzr
 ;        mov     x9, #7378697629483820646
-;        pacia   x15, x28
-;        eor     x30, x30, x15
+;        pacia   [[tmpReg]], x28
+;        eor     x30, x30, [[tmpReg]]
 ;        adrp    x10, ngx_pid
 ;        autia   x30, x28
 ;        movk    x9, #26215
@@ -35,7 +35,7 @@
 ;        add     w8, w9, w8, lsr #3
 ;        orr     w8, w10, w8, lsl #16
 ;        adrp    x9, start_value
-;        mov     x15, xzr
+;        mov     [[tmpReg]], xzr
 ;        str     w8, [x9, :lo12:start_value]
 ;        mov     x0, xzr
 ;        add     sp, sp, #48             // =48
@@ -180,7 +180,8 @@ target triple = "aarch64-unknown-linux-gnu"
 ; CHECK-NOT: ld{{.*}}x30
 ; CHECK: ld{{.*}}x28
 ; CHECK-NOT: ld{{.*}}x30
-; CHECK: eor     x30, x30, x15
+; CHECK: pacia [[tmpReg:x[0-9]+]], x28
+; CHECK: eor     x30, x30, [[tmpReg]]
 ; CHECK: autia   x30, x28
 ; CHECK  ret
 ; Function Attrs: nounwind

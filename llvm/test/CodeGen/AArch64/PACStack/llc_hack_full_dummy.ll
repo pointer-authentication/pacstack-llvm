@@ -6,30 +6,30 @@
 ; CHECK-DAG: eor x30
 ; CHECK-DAG: eor x30
 ; CHECK-DAG: eor x30
-; CHECK-DAG: mov x15, xzr
-; CHECK: eor x15
-; CHECK: eor x15
-; CHECK: eor x15
-; CHECK: eor x15
-; CHECK: eor x30, x30, x15
-; CHECK: mov x15, xzr
+; CHECK-DAG: mov [[tmpReg:x[0-9]+]], xzr
+; CHECK: eor [[tmpReg]]
+; CHECK: eor [[tmpReg]]
+; CHECK: eor [[tmpReg]]
+; CHECK: eor [[tmpReg]]
+; CHECK: eor x30, x30, [[tmpReg]]
+; CHECK: mov [[tmpReg]], xzr
 ; CHECK-NOT: pacia
 ; CHECK: bl
 ; CHECK-NOT: pacia
 ; CHECK: mov x30, x28
 ; CHECK: ld
-; CHECK: mov x15, xzr
-; CHECK: eor x15
-; CHECK: eor x15
-; CHECK: eor x15
-; CHECK: eor x15
+; CHECK: mov [[tmpReg]], xzr
+; CHECK: eor [[tmpReg]]
+; CHECK: eor [[tmpReg]]
+; CHECK: eor [[tmpReg]]
+; CHECK: eor [[tmpReg]]
 ; CHECK: eor x30
 ; CHECK: eor x30
 ; CHECK: eor x30
 ; CHECK: eor x30
 ; CHECK-NOT: autia
 ; CHECK: eor x30, x30, x28
-; CHECK: mov x15, xzr
+; CHECK: mov [[tmpReg]], xzr
 ; CHECK: ret
 define void @func2() #0 {
   call void @func1()
