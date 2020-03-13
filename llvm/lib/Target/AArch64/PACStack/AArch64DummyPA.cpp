@@ -17,6 +17,8 @@
 
 #define DEBUG_TYPE "AArch64DummyPA"
 
+// #define PACSTACK_DO_CHECKING
+
 using namespace llvm;
 using namespace llvm::PACStack;
 
@@ -36,6 +38,11 @@ private:
   void insertEmulatedTimings(MachineBasicBlock &MBB, MachineInstr &MI,
                              unsigned dst, unsigned mod);
   void fixupHack(MachineBasicBlock &MBB, MachineInstr &MI);
+
+#ifdef PACSTACK_DO_CHECKING
+  bool checkFrameSetup(MachineBasicBlock &MBB, MachineInstr &MI);
+  bool checkFrameDestroy(MachineBasicBlock &MBB, MachineInstr &MI);
+#endif /* PACSTACK_DO_CHECKING */
 
   inline bool isPAC(MachineInstr &MI);
 };
@@ -109,6 +116,12 @@ bool AArch64DummyPA::runOnMachineFunction(MachineFunction &MF) {
 bool AArch64DummyPA::convertBasicPAInstr(MachineBasicBlock &MBB, MachineInstr &MI) {
   auto dst = MI.getOperand(0).getReg();
   auto mod = MI.getOperand(1).getReg();
+
+#ifdef PACSTACK_DO_CHECKING
+  // These are doing some checking for possible errors due to optimizations
+  assert(!MI.getFlag(MachineInstr::FrameSetup) || checkFrameSetup(MBB, MI));
+  assert(!MI.getFlag(MachineInstr::FrameDestroy) || checkFrameDestroy(MBB, MI));
+#endif /* PACSSTACK_DO_CHECKING */
 
   insertEmulatedTimings(MBB, MI, dst, mod);
 
@@ -271,3 +284,58 @@ inline bool AArch64DummyPA::isPAC(MachineInstr &MI) {
   }
   return false;
 }
+
+#ifdef PACSTACK_DO_CHECKING
+bool AArch64DummyPA::checkFrameSetup(MachineBasicBlock &MBB,
+                                     MachineInstr &MI) {
+  if (MI.getOperand(0).getReg() != PACStack::maskReg)
+    return true; // Only check masking
+
+  assert(!MBB.isLiveIn(PACStack::maskReg));
+
+  constexpr int SET_TO_ZERO = 0;
+  constexpr int PAC = 1;
+  constexpr int EOR = 2;
+  constexpr int RESET_TO_ZERO = 3;
+
+  auto state = SET_TO_ZERO;
+
+  for (auto MBBI = MBB.begin(), end = MBB.end(); MBBI != end; ++MBBI) {
+
+    if (nullptr != MBBI->findRegisterUseOperand(PACStack::maskReg) ||
+        nullptr != MBBI->findRegisterDefOperand(PACStack::maskReg)) {
+      switch(state) {
+        case SET_TO_ZERO:
+          assert(MBBI->getOpcode() == AArch64::ORRXrs && "Expecting move");
+          assert(
+                  MBBI->getOperand(0).getReg() == PACStack::maskReg &&
+                  MBBI->getOperand(1).getReg() == AArch64::XZR &&
+                  MBBI->getOperand(1).getReg() == AArch64::XZR);
+          ++state;
+          break;
+        case PAC:
+          assert(MBBI->getOpcode() == AArch64::PACIA && "Expecting move");
+          ++state;
+          break;
+        case EOR:
+          assert(MBBI->getOpcode() == AArch64::EORXrs && "Expecting move");
+          ++state;
+          break;
+        case RESET_TO_ZERO:
+          assert(MBBI->getOpcode() == AArch64::ORRXrs && "Expecting move");
+          assert(
+                  MBBI->getOperand(0).getReg() == PACStack::maskReg &&
+                  MBBI->getOperand(1).getReg() == AArch64::XZR &&
+                  MBBI->getOperand(1).getReg() == AArch64::XZR);
+          return true;
+      }
+    }
+  }
+  return false;
+}
+
+bool AArch64DummyPA::checkFrameDestroy(MachineBasicBlock &MBB,
+                                       MachineInstr &MI) {
+  return true;
+}
+#endif /* PACSTACK_DO_CHECKING */
