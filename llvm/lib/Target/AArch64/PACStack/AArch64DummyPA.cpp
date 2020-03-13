@@ -18,6 +18,7 @@
 #define DEBUG_TYPE "AArch64DummyPA"
 
 // #define PACSTACK_DO_CHECKING
+// #define DO_SHORT_DUMMY
 
 using namespace llvm;
 using namespace llvm::PACStack;
@@ -212,6 +213,7 @@ void AArch64DummyPA::insertEmulatedTimings(MachineBasicBlock &MBB,
                              : TII->get(AArch64::EORXrs));
 
   if (MI.getFlag(MachineInstr::FrameDestroy)) {
+#ifndef DO_SHORT_DUMMY
     BuildMI(MBB, MI, DL, MCID)
             .addDef(dst)
             .addUse(dst).addReg(dst).addImm(48)
@@ -224,11 +226,13 @@ void AArch64DummyPA::insertEmulatedTimings(MachineBasicBlock &MBB,
             .addDef(dst)
             .addUse(dst).addReg(mod).addImm(56)
             .setMIFlag(MachineInstr::FrameDestroy);
+#endif
     BuildMI(MBB, MI, DL, MCID)
             .addDef(dst)
             .addUse(dst).addReg(mod).addImm(60)
             .setMIFlag(MachineInstr::FrameDestroy);
   } else if (MI.getFlag(MachineInstr::FrameSetup)) {
+#ifndef DO_SHORT_DUMMY
     BuildMI(MBB, MI, DL, MCID)
             .addDef(dst)
             .addUse(dst).addReg(dst).addImm(48)
@@ -241,11 +245,13 @@ void AArch64DummyPA::insertEmulatedTimings(MachineBasicBlock &MBB,
             .addDef(dst)
             .addUse(dst).addReg(mod).addImm(56)
             .setMIFlag(MachineInstr::FrameSetup);
+#endif
     BuildMI(MBB, MI, DL, MCID)
             .addDef(dst)
             .addUse(dst).addReg(mod).addImm(60)
             .setMIFlag(MachineInstr::FrameSetup);
   } else  {
+#ifndef DO_SHORT_DUMMY
     BuildMI(MBB, MI, DL, MCID)
             .addDef(dst)
             .addUse(dst).addReg(dst).addImm(48);
@@ -255,6 +261,7 @@ void AArch64DummyPA::insertEmulatedTimings(MachineBasicBlock &MBB,
     BuildMI(MBB, MI, DL, MCID)
             .addDef(dst)
             .addUse(dst).addReg(mod).addImm(56);
+#endif
     BuildMI(MBB, MI, DL, MCID)
             .addDef(dst)
             .addUse(dst).addReg(mod).addImm(60);
