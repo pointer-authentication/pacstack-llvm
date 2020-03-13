@@ -594,6 +594,9 @@ void AArch64PassConfig::addPreSched2() {
 }
 
 void AArch64PassConfig::addPreEmitPass() {
+  if (PACStack::doDummyPA())
+    addPass(createAArch64DummyPA());
+
   // Machine Block Placement might have created new opportunities when run
   // at O3, where the Tail Duplication Threshold is set to 4 instructions.
   // Run the load/store optimizer once more.
@@ -616,7 +619,4 @@ void AArch64PassConfig::addPreEmitPass() {
   if (TM->getOptLevel() != CodeGenOpt::None && EnableCollectLOH &&
       TM->getTargetTriple().isOSBinFormatMachO())
     addPass(createAArch64CollectLOHPass());
-
-  if (PACStack::doDummyPA())
-    addPass(createAArch64DummyPA());
 }

@@ -2,16 +2,16 @@
 
 ; CHECK-LABEL: @func2
 ; CHECK-DAG: pacia  x30, x28
-; CHECK-DAG: mov x15, xzr
-; CHECK: pacia x15, x28
-; CHECK: eor x30, x30, x15
-; CHECK-DAG: mov x15, xzr
+; CHECK-DAG: mov [[tmpReg:x[0-9]+]], xzr
+; CHECK: pacia [[tmpReg]], x28
+; CHECK: eor x30, x30, [[tmpReg]]
+; CHECK-DAG: mov [[tmpReg]], xzr
 ; CHECK-DAG: mov x28, x30
 ; CHECK: bl
-; CHECK: mov x15, xzr
-; CHECK: pacia x15, x28
-; CHECK: eor x30, x30, x15
-; CHECK-DAG: mov x15, xzr
+; CHECK: mov [[tmpReg]], xzr
+; CHECK: pacia [[tmpReg]], x28
+; CHECK: eor x30, x30, [[tmpReg]]
+; CHECK-DAG: mov [[tmpReg]], xzr
 ; CHECK-DAG: autia x30, x28
 ; CHECK: ret
 define void @func2() #0 {

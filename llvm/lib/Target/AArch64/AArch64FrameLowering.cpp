@@ -96,6 +96,7 @@
 #include "AArch64RegisterInfo.h"
 #include "AArch64Subtarget.h"
 #include "AArch64TargetMachine.h"
+#include "PACStack/AArch64PACStack.h"
 #include "MCTargetDesc/AArch64AddressingModes.h"
 #include "llvm/ADT/ScopeExit.h"
 #include "llvm/ADT/SmallVector.h"
@@ -2123,7 +2124,7 @@ void AArch64FrameLowering::determineCalleeSaves(MachineFunction &MF,
   if (F.hasFnAttribute("pacstack") &&
       F.getFnAttribute("pacstack").getValueAsString() != "none" &&
       SavedRegs.test(AArch64::LR)) {
-    SavedRegs.set(AArch64::X28);
+    SavedRegs.set(PACStack::CR);
   }
 
   LLVM_DEBUG(dbgs() << "*** determineCalleeSaves\nUsed CSRs:";
@@ -2189,7 +2190,7 @@ void AArch64FrameLowering::determineCalleeSaves(MachineFunction &MF,
 
   assert((!F.hasFnAttribute("pacstack") ||
           F.getFnAttribute("pacstack").getValueAsString() == "none" ||
-          SavedRegs.test(AArch64::X28) == SavedRegs.test(AArch64::LR)) &&
+          SavedRegs.test(PACStack::CR) == SavedRegs.test(AArch64::LR)) &&
          "If LR and CR is saved, then both should be");
 }
 
@@ -2274,26 +2275,27 @@ inline void AArch64FrameLowering::insertCollisionProtection(MachineBasicBlock &M
 
   assert(flag != MachineInstr::FrameSetup
          || std::all_of(MBB.begin(), MBBI, [](MachineBasicBlock::iterator check) {
-    return -1 == check->findRegisterUseOperandIdx(AArch64::X15)
-           && -1 == check->findRegisterDefOperandIdx(AArch64::X15)
-           && !check->killsRegister(AArch64::X15);
-  }) && "Shouldn't be using, defining, or killing X15");
+    return -1 == check->findRegisterUseOperandIdx(PACStack::maskReg)
+           && -1 == check->findRegisterDefOperandIdx(PACStack::maskReg)
+           && !check->killsRegister(PACStack::maskReg);
+  }) && "Shouldn't be using, defining, or killing maskReg");
   assert((flag != MachineInstr::FrameSetup
-          || !MBB.isLiveIn(AArch64::X15)) && "X15 live in FrameSetup MBB");
+          || !MBB.isLiveIn(PACStack::maskReg)) && "maskReg live in FrameSetup MBB");
 
-  // MOV X15 <- XZR
+  // MOV maskReg <- XZR
   (MBBI == MBB.end()
    ? BuildMI(&MBB, DL, TII->get(AArch64::ORRXrs))
    : BuildMI(MBB, MBBI, DL, TII->get(AArch64::ORRXrs)))
-          .addReg(AArch64::X15, RegState::Define) .addUse(AArch64::XZR)
+          .addReg(PACStack::maskReg, RegState::Define)
+          .addUse(AArch64::XZR)
           .addUse(AArch64::XZR).addImm(0)
           .setMIFlag(flag);
-  // X15 <- PACIA X15, X28
+  // maskReg <- PACIA maskReg, CR
   (MBBI == MBB.end()
    ? BuildMI(&MBB, DL, TII->get(AArch64::PACIA))
    : BuildMI(MBB, MBBI, DL, TII->get(AArch64::PACIA)))
-            .addReg(AArch64::X15, RegState::Define)
-            .addUse(AArch64::X28)
+            .addReg(PACStack::maskReg, RegState::Define)
+            .addUse(PACStack::CR)
             .setMIFlag(flag);
   // LR <- EOR LR, mask
   (MBBI == MBB.end()
@@ -2301,13 +2303,13 @@ inline void AArch64FrameLowering::insertCollisionProtection(MachineBasicBlock &M
    : BuildMI(MBB, MBBI, DL, TII->get(AArch64::EORXrs)))
             .addReg(AArch64::LR, RegState::Define)
             .addReg(AArch64::LR)
-            .addReg(AArch64::X15).addImm(0)
+            .addReg(PACStack::maskReg).addImm(0)
             .setMIFlag(flag);
-  // MOV X15 <- XZR
+  // MOV maskReg <- XZR
   (MBBI == MBB.end()
    ? BuildMI(&MBB, DL, TII->get(AArch64::ORRXrs))
    : BuildMI(MBB, MBBI, DL, TII->get(AArch64::ORRXrs)))
-          .addReg(AArch64::X15, RegState::Define) .addUse(AArch64::XZR)
+          .addReg(PACStack::maskReg, RegState::Define) .addUse(AArch64::XZR)
           .addUse(AArch64::XZR).addImm(0)
           .setMIFlag(flag);
 }
@@ -2325,13 +2327,14 @@ inline void AArch64FrameLowering::PACStackPostFrameSetup(MachineBasicBlock &MBB,
   if (!needsPACStack(MF)) return;
 
   assert(std::all_of(MBB.begin(), MBBI, [](MachineBasicBlock::iterator check) {
-    return -1 == check->findRegisterUseOperandIdx(AArch64::X15)
-           && -1 == check->findRegisterDefOperandIdx(AArch64::X15)
-           && !check->killsRegister(AArch64::X15);
-  }) && "Shouldn't be using, defining, or killing X15");
+    return -1 == check->findRegisterUseOperandIdx(PACStack::maskReg)
+           && -1 == check->findRegisterDefOperandIdx(PACStack::maskReg)
+           && !check->killsRegister(PACStack::maskReg);
+  }) && "Shouldn't be using, defining, or killing maskReg");
 
-  // Don't kill LR or X28 on store in FrameSetup
-  for (auto str = (MBBI != MBB.end() ? MBBI->getReverseIterator() : MBB.rbegin());
+  // Don't kill LR or PACStack::CR on store in FrameSetup
+  for (auto str = (MBBI != MBB.end() ?
+                   MBBI->getReverseIterator() : MBB.rbegin());
        str != MBB.rend(); ++str) {
     switch(str->getOpcode()) {
       case AArch64::STRXui:
@@ -2341,35 +2344,38 @@ inline void AArch64FrameLowering::PACStackPostFrameSetup(MachineBasicBlock &MBB,
         if (str->killsRegister(AArch64::LR)) {
           str->clearRegisterKills(AArch64::LR, &TRI);
         }
-        if (str->killsRegister(AArch64::X28)) {
-          str->clearRegisterKills(AArch64::X28, &TRI);
+        if (str->killsRegister(PACStack::CR)) {
+          str->clearRegisterKills(PACStack::CR, &TRI);
         }
     }
   }
 
-  // LR <- PACIA LR, X28
+  // LR <- PACIA LR, CR
   (MBBI == MBB.end()
    ? BuildMI(&MBB, DL, TII->get(AArch64::PACIA))
    : BuildMI(MBB, MBBI, DL, TII->get(AArch64::PACIA)))
       .addReg(AArch64::LR, RegState::Define)
-      .addUse(AArch64::X28)
+      .addUse(PACStack::CR)
       .setMIFlag(MachineInstr::FrameSetup);
 
   // Add collision protection / masking
-  if (F.hasFnAttribute("pacstack") &&F.getFnAttribute("pacstack").getValueAsString() == "full")
+  if (F.hasFnAttribute("pacstack") &&
+      F.getFnAttribute("pacstack").getValueAsString() == "full")
     insertCollisionProtection(MBB, MBBI, DL, MachineInstr::FrameSetup);
 
-  // MOV X28 <- LR
+  // MOV CR <- LR
   (MBBI == MBB.end()
    ? BuildMI(&MBB, DL, TII->get(AArch64::ORRXrs))
    : BuildMI(MBB, MBBI, DL, TII->get(AArch64::ORRXrs)))
-      .addReg(AArch64::X28, RegState::Define).addUse(AArch64::XZR)
+      .addReg(PACStack::CR, RegState::Define)
+      .addUse(AArch64::XZR)
       .addUse(AArch64::LR).addImm(0)
       .setMIFlag(MachineInstr::FrameSetup)
       ->addRegisterKilled(AArch64::LR, &TRI);
 }
 
-inline void AArch64FrameLowering::PACStackPostFrameDestroy(MachineBasicBlock &MBB) const {
+inline void AArch64FrameLowering::PACStackPostFrameDestroy(
+        MachineBasicBlock &MBB) const {
   const MachineFunction *MF = MBB.getParent();
   const Function &F = MF->getFunction();
   const auto &Subtarget = MF->getSubtarget<AArch64Subtarget>();
@@ -2383,35 +2389,38 @@ inline void AArch64FrameLowering::PACStackPostFrameDestroy(MachineBasicBlock &MB
 
   DebugLoc DL;
 
-  // Find where LR is loaded from the stack and just throw it away, into X15, I guess :(
+  // Find where LR is loaded from the stack and just throw it away  into maskReg)
   // FIXME: This load should be completely eliminated! (but the pair must stay)
   for (rMBBI = (MBBI != MBB.end() ? MBBI->getReverseIterator() : MBB.rbegin());
        rMBBI != MBB.rend() && !rMBBI->definesRegister(AArch64::LR);
        ++rMBBI);
   MachineOperand *op = rMBBI->findRegisterDefOperand(AArch64::LR);
   assert(op != nullptr && "we expect to always find this");
-  op->setReg(AArch64::X15);
+  op->setReg(PACStack::maskReg);
 
-  // Find where X28 is loaded
+  // Find where CR is loaded
   for (rMBBI = (MBBI != MBB.end() ? MBBI->getReverseIterator() : MBB.rbegin());
-       rMBBI != MBB.rend() && !rMBBI->definesRegister(AArch64::X28);
+       rMBBI != MBB.rend() && !rMBBI->definesRegister(PACStack::CR);
       ++rMBBI);
-  // MOV LR <- X28
-  BuildMI(MBB, rMBBI->getIterator(), rMBBI->getDebugLoc(), TII->get(AArch64::ORRXrs))
-          .addReg(AArch64::LR, RegState::Define).addUse(AArch64::XZR)
-          .addUse(AArch64::X28).addImm(0)
+  // MOV LR <- CR
+  BuildMI(MBB, rMBBI->getIterator(), rMBBI->getDebugLoc(),
+          TII->get(AArch64::ORRXrs))
+          .addReg(AArch64::LR, RegState::Define)
+          .addUse(AArch64::XZR)
+          .addUse(PACStack::CR).addImm(0)
           .setMIFlag(MachineInstr::FrameDestroy)
-          ->addRegisterKilled(AArch64::X28, &TRI);
+          ->addRegisterKilled(PACStack::CR, &TRI);
 
   // Add collision protection / masking
-  if (F.hasFnAttribute("pacstack") &&F.getFnAttribute("pacstack").getValueAsString() == "full")
+  if (F.hasFnAttribute("pacstack") &&
+      F.getFnAttribute("pacstack").getValueAsString() == "full")
     insertCollisionProtection(MBB, MBBI, DL, MachineInstr::FrameDestroy);
 
   (MBBI == MBB.end()
    ? BuildMI(&MBB, DL, TII->get(AArch64::AUTIA))
    : BuildMI(MBB, MBBI, MBBI->getDebugLoc(), TII->get(AArch64::AUTIA)))
           .addReg(AArch64::LR, RegState::Define)
-          .addUse(AArch64::X28)
+          .addUse(PACStack::CR)
           .setMIFlag(MachineInstr::FrameDestroy);
 }
 
@@ -2426,7 +2435,7 @@ bool AArch64FrameLowering::needsPACStack(const MachineFunction *MF) const {
 
   for (const auto &Info : MF->getFrameInfo().getCalleeSavedInfo()) {
     const auto r = Info.getReg();
-    if (r == AArch64::LR || r == AArch64::X28) {
+    if (r == AArch64::LR || r == PACStack::CR) {
       return true;
     }
   }

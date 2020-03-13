@@ -17,6 +17,9 @@
 
 #define DEBUG_TYPE "AArch64DummyPA"
 
+// #define PACSTACK_DO_CHECKING
+// #define DO_SHORT_DUMMY
+
 using namespace llvm;
 using namespace llvm::PACStack;
 
@@ -36,6 +39,13 @@ private:
   void insertEmulatedTimings(MachineBasicBlock &MBB, MachineInstr &MI,
                              unsigned dst, unsigned mod);
   void fixupHack(MachineBasicBlock &MBB, MachineInstr &MI);
+
+#ifdef PACSTACK_DO_CHECKING
+  bool checkFrameSetup(MachineBasicBlock &MBB, MachineInstr &MI);
+  bool checkFrameDestroy(MachineBasicBlock &MBB, MachineInstr &MI);
+#endif /* PACSTACK_DO_CHECKING */
+
+  inline bool isPAC(MachineInstr &MI);
 };
 }
 
@@ -108,9 +118,16 @@ bool AArch64DummyPA::convertBasicPAInstr(MachineBasicBlock &MBB, MachineInstr &M
   auto dst = MI.getOperand(0).getReg();
   auto mod = MI.getOperand(1).getReg();
 
+#ifdef PACSTACK_DO_CHECKING
+  // These are doing some checking for possible errors due to optimizations
+  assert(!MI.getFlag(MachineInstr::FrameSetup) || checkFrameSetup(MBB, MI));
+  assert(!MI.getFlag(MachineInstr::FrameDestroy) || checkFrameDestroy(MBB, MI));
+#endif /* PACSSTACK_DO_CHECKING */
+
   insertEmulatedTimings(MBB, MI, dst, mod);
 
-  fixupHack(MBB, MI);
+  if (MI.getFlag(MachineInstr::FrameSetup))
+    fixupHack(MBB, MI);
 
   MI.removeFromParent();
   return true;
@@ -179,6 +196,7 @@ void AArch64DummyPA::fixupHack(MachineBasicBlock &MBB,
           case AArch64::STPXi:
             if (MBBI->killsRegister(AArch64::LR)) {
               MBBI->clearRegisterKills(AArch64::LR, TRI);
+              return;
             }
         }
       }
@@ -190,7 +208,67 @@ void AArch64DummyPA::insertEmulatedTimings(MachineBasicBlock &MBB,
                                            unsigned dst, unsigned mod) {
   DebugLoc DL = MI.getDebugLoc();
 
-  bool isAut = true;
+  const MCInstrDesc &MCID = (isPAC(MI)
+                             ? TII->get(AArch64::EORXrs)
+                             : TII->get(AArch64::EORXrs));
+
+  if (MI.getFlag(MachineInstr::FrameDestroy)) {
+#ifndef DO_SHORT_DUMMY
+    BuildMI(MBB, MI, DL, MCID)
+            .addDef(dst)
+            .addUse(dst).addReg(dst).addImm(48)
+            .setMIFlag(MachineInstr::FrameDestroy);
+    BuildMI(MBB, MI, DL, MCID)
+            .addDef(dst)
+            .addUse(dst).addReg(mod).addImm(52)
+            .setMIFlag(MachineInstr::FrameDestroy);
+    BuildMI(MBB, MI, DL, MCID)
+            .addDef(dst)
+            .addUse(dst).addReg(mod).addImm(56)
+            .setMIFlag(MachineInstr::FrameDestroy);
+#endif
+    BuildMI(MBB, MI, DL, MCID)
+            .addDef(dst)
+            .addUse(dst).addReg(mod).addImm(60)
+            .setMIFlag(MachineInstr::FrameDestroy);
+  } else if (MI.getFlag(MachineInstr::FrameSetup)) {
+#ifndef DO_SHORT_DUMMY
+    BuildMI(MBB, MI, DL, MCID)
+            .addDef(dst)
+            .addUse(dst).addReg(dst).addImm(48)
+            .setMIFlag(MachineInstr::FrameSetup);
+    BuildMI(MBB, MI, DL, MCID)
+            .addDef(dst)
+            .addUse(dst).addReg(mod).addImm(52)
+            .setMIFlag(MachineInstr::FrameSetup);
+    BuildMI(MBB, MI, DL, MCID)
+            .addDef(dst)
+            .addUse(dst).addReg(mod).addImm(56)
+            .setMIFlag(MachineInstr::FrameSetup);
+#endif
+    BuildMI(MBB, MI, DL, MCID)
+            .addDef(dst)
+            .addUse(dst).addReg(mod).addImm(60)
+            .setMIFlag(MachineInstr::FrameSetup);
+  } else  {
+#ifndef DO_SHORT_DUMMY
+    BuildMI(MBB, MI, DL, MCID)
+            .addDef(dst)
+            .addUse(dst).addReg(dst).addImm(48);
+    BuildMI(MBB, MI, DL, MCID)
+            .addDef(dst)
+            .addUse(dst).addReg(mod).addImm(52);
+    BuildMI(MBB, MI, DL, MCID)
+            .addDef(dst)
+            .addUse(dst).addReg(mod).addImm(56);
+#endif
+    BuildMI(MBB, MI, DL, MCID)
+            .addDef(dst)
+            .addUse(dst).addReg(mod).addImm(60);
+  }
+}
+
+inline bool AArch64DummyPA::isPAC(MachineInstr &MI) {
   switch(MI.getOpcode()) {
     default:
       break;
@@ -209,38 +287,62 @@ void AArch64DummyPA::insertEmulatedTimings(MachineBasicBlock &MBB,
     case AArch64::PACIAZ:
     case AArch64::PACIB1716:
     case AArch64::PACIBZ:
-      isAut = false;
+      return true;
   }
-
-  const MCInstrDesc &MCID = (isAut
-                             ? TII->get(AArch64::EORXrs)
-                             : TII->get(AArch64::EORXrs));
-
-  auto &dummy1 = BuildMI(MBB, MI, DL, MCID)
-      .addDef(dst)
-      .addUse(dst).addReg(dst).addImm(48);
-  auto &dummy2 = BuildMI(MBB, MI, DL, MCID)
-      .addDef(dst)
-      .addUse(dst).addReg(mod).addImm(52);
-  auto &dummy3 = BuildMI(MBB, MI, DL, MCID)
-      .addDef(dst)
-      .addUse(dst).addReg(mod).addImm(56);
-  auto &dummy4 = BuildMI(MBB, MI, DL, MCID)
-      .addDef(dst)
-      .addUse(dst).addReg(mod).addImm(60);
-
-  if (MI.getFlag(MachineInstr::FrameDestroy)) {
-    dummy1.setMIFlag(MachineInstr::FrameDestroy);
-    dummy2.setMIFlag(MachineInstr::FrameDestroy);
-    dummy3.setMIFlag(MachineInstr::FrameDestroy);
-    dummy4.setMIFlag(MachineInstr::FrameDestroy);
-  }
-
-  if (MI.getFlag(MachineInstr::FrameSetup)) {
-    dummy1.setMIFlag(MachineInstr::FrameSetup);
-    dummy2.setMIFlag(MachineInstr::FrameSetup);
-    dummy3.setMIFlag(MachineInstr::FrameSetup);
-    dummy4.setMIFlag(MachineInstr::FrameSetup);
-  }
+  return false;
 }
 
+#ifdef PACSTACK_DO_CHECKING
+bool AArch64DummyPA::checkFrameSetup(MachineBasicBlock &MBB,
+                                     MachineInstr &MI) {
+  if (MI.getOperand(0).getReg() != PACStack::maskReg)
+    return true; // Only check masking
+
+  assert(!MBB.isLiveIn(PACStack::maskReg));
+
+  constexpr int SET_TO_ZERO = 0;
+  constexpr int PAC = 1;
+  constexpr int EOR = 2;
+  constexpr int RESET_TO_ZERO = 3;
+
+  auto state = SET_TO_ZERO;
+
+  for (auto MBBI = MBB.begin(), end = MBB.end(); MBBI != end; ++MBBI) {
+
+    if (nullptr != MBBI->findRegisterUseOperand(PACStack::maskReg) ||
+        nullptr != MBBI->findRegisterDefOperand(PACStack::maskReg)) {
+      switch(state) {
+        case SET_TO_ZERO:
+          assert(MBBI->getOpcode() == AArch64::ORRXrs && "Expecting move");
+          assert(
+                  MBBI->getOperand(0).getReg() == PACStack::maskReg &&
+                  MBBI->getOperand(1).getReg() == AArch64::XZR &&
+                  MBBI->getOperand(1).getReg() == AArch64::XZR);
+          ++state;
+          break;
+        case PAC:
+          assert(MBBI->getOpcode() == AArch64::PACIA && "Expecting move");
+          ++state;
+          break;
+        case EOR:
+          assert(MBBI->getOpcode() == AArch64::EORXrs && "Expecting move");
+          ++state;
+          break;
+        case RESET_TO_ZERO:
+          assert(MBBI->getOpcode() == AArch64::ORRXrs && "Expecting move");
+          assert(
+                  MBBI->getOperand(0).getReg() == PACStack::maskReg &&
+                  MBBI->getOperand(1).getReg() == AArch64::XZR &&
+                  MBBI->getOperand(1).getReg() == AArch64::XZR);
+          return true;
+      }
+    }
+  }
+  return false;
+}
+
+bool AArch64DummyPA::checkFrameDestroy(MachineBasicBlock &MBB,
+                                       MachineInstr &MI) {
+  return true;
+}
+#endif /* PACSTACK_DO_CHECKING */
