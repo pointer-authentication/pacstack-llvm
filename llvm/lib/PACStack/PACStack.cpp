@@ -1,11 +1,25 @@
-//===----------------------------------------------------------------------===//
+//===- PACStack.cpp - PACStack ---------------------------------*- C++ -*--===//
 //
 // Author: Hans Liljestrand <hans@liljestrand.dev>
-// Copyright (c) 2020 Secure Systems Group, Aalto University https://ssg.aalto.fi/
+// Copyright (c) 2020 Secure Systems Group, Aalto University
+//                    <https://ssg.aalto.fi/>
+// Copyright (c) 2020 Secure Systems Group, University of Waterloo
+//                    <https://crysp.uwaterloo.ca/research/SSG>
 //
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Released under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
+//===----------------------------------------------------------------------===//
+// Registers PACStack command line options:
+//     `-pacstack=(none|full|nomask)` for the PACStack instrumentaiton
+//     `-aarch64-pacstack-dummy-pa`   for replacing PAuth instruction with
+//                                    instructions that emulate the overhead
+//                                    and behavior of expected PAuth HW.
+//
+// Also defines a simple opt PASS that simply adds a corresponding attribute
+// to all Functions. This would eventually be replaced by the Clang frontend
+// adding the attributes in the front-end.
 //===----------------------------------------------------------------------===//
 
 #include "llvm/PACStack/PACStack.h"
