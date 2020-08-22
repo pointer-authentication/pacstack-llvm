@@ -35,7 +35,7 @@ using namespace llvm::PACStack;
 
 namespace {
 
-class AArch64DummyPA : public MachineFunctionPass, private AArch64PACStackCommon {
+class AArch64DummyPA : public MachineFunctionPass {
 public:
   static char ID;
 
@@ -43,12 +43,80 @@ public:
   bool runOnMachineFunction(MachineFunction &) override;
 
 private:
+  const AArch64Subtarget *STI = nullptr;
+  const AArch64InstrInfo *TII = nullptr;
+  const AArch64RegisterInfo *TRI = nullptr;
+
   bool convertBasicPAInstr(MachineBasicBlock &MBB, MachineInstr &MI);
   bool convertSpPAInstr(MachineBasicBlock &MBB, MachineInstr &MI);
   bool convertRetPAInstr(MachineBasicBlock &MBB, MachineInstr &MI);
   void insertEmulatedTimings(MachineBasicBlock &MBB, MachineInstr &MI,
                              unsigned dst, unsigned mod);
   void fixupHack(MachineBasicBlock &MBB, MachineInstr &MI);
+
+
+  inline MachineInstrBuilder buildMOV(MachineBasicBlock &MBB,
+                                      const DebugLoc &DL,
+                                      MachineInstr *MI) const {
+    return MI != nullptr ? BuildMI(MBB, MI, DL, TII->get(AArch64::ORRXrs))
+                         : BuildMI(&MBB, DL, TII->get(AArch64::ORRXrs));
+  }
+
+
+  inline MachineInstrBuilder buildMOV(MachineBasicBlock &MBB,
+                                      const DebugLoc &DL,
+                                      unsigned dst,
+                                      unsigned src,
+                                      MachineInstr *MI) const {
+    return buildMOV(MBB, DL, MI).addReg(dst, RegState::Define)
+        .addUse(AArch64::XZR).addUse(src).addImm(0);
+  }
+
+  inline MachineInstrBuilder buildAUTIA(MachineBasicBlock &MBB,
+                                        const DebugLoc &DL,
+                                        MachineInstr *MI) const {
+    return MI != nullptr ? BuildMI(MBB, MI, DL, TII->get(AArch64::AUTIA))
+                         : BuildMI(&MBB, DL, TII->get(AArch64::AUTIA));
+  }
+
+  inline MachineInstrBuilder buildAUTIA(MachineBasicBlock &MBB,
+                                        const DebugLoc &DL,
+                                        unsigned ptr,
+                                        unsigned mod,
+                                        MachineInstr *MI) const {
+    return buildAUTIA(MBB, DL, MI).addReg(ptr, RegState::Define).addUse(mod);
+  }
+
+  inline MachineInstrBuilder buildPACIA(MachineBasicBlock &MBB,
+                                        const DebugLoc &DL,
+                                        MachineInstr *MI) const {
+    return MI != nullptr ? BuildMI(MBB, MI, DL, TII->get(AArch64::PACIA))
+                         : BuildMI(&MBB, DL, TII->get(AArch64::PACIA));
+  }
+
+  inline MachineInstrBuilder buildPACIA(MachineBasicBlock &MBB,
+                                        const DebugLoc &DL,
+                                        unsigned ptr,
+                                        unsigned mod,
+                                        MachineInstr *MI) const {
+    return buildPACIA(MBB, DL, MI).addReg(ptr, RegState::Define).addUse(mod);
+  }
+
+  inline MachineInstrBuilder buildEOR(MachineBasicBlock &MBB,
+                                      const DebugLoc &DL,
+                                      MachineInstr *MI) const {
+    return MI != nullptr ? BuildMI(MBB, MI, DL, TII->get(AArch64::EORXrs))
+                         : BuildMI(&MBB, DL, TII->get(AArch64::EORXrs));
+  }
+
+  inline MachineInstrBuilder buildEOR(MachineBasicBlock &MBB,
+                                      const DebugLoc &DL,
+                                      unsigned dst,
+                                      unsigned src,
+                                      MachineInstr *MI) const {
+    return buildEOR(MBB, DL, MI).addReg(dst, RegState::Define)
+        .addReg(dst).addReg(src).addImm(0);
+  }
 
 #ifdef PACSTACK_DO_CHECKING
   bool checkFrameSetup(MachineBasicBlock &MBB, MachineInstr &MI);
