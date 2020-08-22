@@ -32,12 +32,6 @@ static cl::opt<PACStackType> PACStackTypeOpt(
         clEnumValN(PACStackNoMask, "nomask", "PACStack without masking")
     ));
 
-static cl::opt<bool> EnableAArch64IRPass(
-    "aarch64-pacstack-ir-pass",
-    cl::Hidden,
-    cl::desc("(obsolete, no longer needed)"),
-    cl::init(false));
-
 static cl::opt<bool>
     EnableAArch64DummyPA("aarch64-pacstack-dummy-pa", cl::Hidden,
                          cl::desc("Replace PACStack PA to the PA analog"),
