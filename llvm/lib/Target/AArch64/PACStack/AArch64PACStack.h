@@ -16,25 +16,25 @@
 // TODO: Move DummyPA-only parts to AArch64DummyPA.cpp
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_AARCH64PAFSSCOMMON_H
-#define LLVM_AARCH64PAFSSCOMMON_H
+#ifndef LLVM_LIB_TARGET_AARCH64_PACSTACK_AARCH64PACSTACK_H
+#define LLVM_LIB_TARGET_AARCH64_PACSTACK_AARCH64PACSTACK_H
 
 #include "AArch64InstrInfo.h"
 #include "AArch64Subtarget.h"
 
-#include "llvm/PACStack/PACStack.h"
-#include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineBasicBlock.h"
+#include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineInstr.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
 #include "llvm/CodeGen/RegisterScavenging.h"
+#include "llvm/PACStack/PACStack.h"
 
 namespace llvm {
 namespace PACStack {
 
 static constexpr unsigned CR = AArch64::X28;
 static constexpr unsigned CRSub = AArch64::W28;
-static constexpr unsigned maskReg = AArch64::X15;
+static constexpr unsigned MaskReg = AArch64::X15;
 
 inline bool hasPACStackAttribute(const MachineFunction &MF) {
   const auto &F = MF.getFunction();
@@ -46,7 +46,7 @@ inline bool hasPACStackAttribute(const MachineFunction &MF) {
          F.getFnAttribute(PACStackAttribute).getValueAsString() != "none";
 }
 
-}
-}
+} // namespace PACStack
+} // namespace llvm
 
-#endif //LLVM_AARCH64PAFSSCOMMON_H
+#endif // LLVM_LIB_TARGET_AARCH64_PACSTACK_AARCH64PACSTACK_H

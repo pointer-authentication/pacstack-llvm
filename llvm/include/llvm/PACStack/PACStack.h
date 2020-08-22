@@ -11,8 +11,8 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
-#ifndef LLVM_PACSTACK_H
-#define LLVM_PACSTACK_H
+#ifndef LLVM_PACSTACK_PACSTACK_H
+#define LLVM_PACSTACK_PACSTACK_H
 
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Pass.h"
@@ -33,7 +33,7 @@ Pass *createPACStackOptCallPass();
 bool doAArch64IRPass();
 bool doDummyPA();
 
-}
-}
+} // namespace PACStack
+} // namespace llvm
 
-#endif //LLVM_PACSTACK_H
+#endif // LLVM_PACSTACK_PACSTACK_H

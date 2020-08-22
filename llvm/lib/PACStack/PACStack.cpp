@@ -12,7 +12,7 @@
 //
 //===----------------------------------------------------------------------===//
 // Registers PACStack command line options:
-//     `-pacstack=(none|full|nomask)` for the PACStack instrumentaiton
+//     `-pacstack=(none|full|nomask)` for the PACStack instrumentation
 //     `-aarch64-pacstack-dummy-pa`   for replacing PAuth instruction with
 //                                    instructions that emulate the overhead
 //                                    and behavior of expected PAuth HW.
@@ -22,16 +22,10 @@
 // adding the attributes in the front-end.
 //===----------------------------------------------------------------------===//
 
-#include "llvm/PACStack/PACStack.h"
-#include "llvm/Support/CommandLine.h"
 #include "llvm/ADT/Statistic.h"
 #include "llvm/IR/Function.h"
-#include "llvm/IR/Intrinsics.h"
-#include "llvm/IR/InstIterator.h"
-#include "llvm/IR/InstrTypes.h"
 #include "llvm/IR/IRBuilder.h"
-#include "llvm/Pass.h"
-#include "llvm/Support/raw_ostream.h"
+#include "llvm/PACStack/PACStack.h"
 
 using namespace llvm;
 using namespace PACStack;
@@ -70,7 +64,7 @@ public:
   }
 };
 
-}
+} // namespace
 
 char PACStackOptCallPass::ID = 0;
 
@@ -80,13 +74,13 @@ Pass *llvm::PACStack::createPACStackOptCallPass() { return new PACStackOptCallPa
 
 bool PACStackOptCallPass::runOnFunction(Function &F) {
   switch(PACStackTypeOpt) {
-    case PACStackNone:
-      return false;
     case PACStackFull:
       F.addFnAttr(PACStackAttribute, "full");
       return true;
     case PACStackNoMask:
       F.addFnAttr(PACStackAttribute, "nomask");
       return true;
+    default:
+      return false;
   }
 }

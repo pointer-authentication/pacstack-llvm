@@ -2273,28 +2273,28 @@ inline void AArch64FrameLowering::insertCollisionProtection(MachineBasicBlock &M
   const auto &Subtarget = MF->getSubtarget<AArch64Subtarget>();
   const TargetInstrInfo *TII = Subtarget.getInstrInfo();
 
-  assert(flag != MachineInstr::FrameSetup
-         || std::all_of(MBB.begin(), MBBI, [](MachineBasicBlock::iterator check) {
-    return -1 == check->findRegisterUseOperandIdx(PACStack::maskReg)
-           && -1 == check->findRegisterDefOperandIdx(PACStack::maskReg)
-           && !check->killsRegister(PACStack::maskReg);
-  }) && "Shouldn't be using, defining, or killing maskReg");
+  assert((flag != MachineInstr::FrameSetup || std::all_of(
+      MBB.begin(), MBBI, [](MachineBasicBlock::iterator check) {
+        return -1 == check->findRegisterUseOperandIdx(PACStack::MaskReg)
+               && -1 == check->findRegisterDefOperandIdx(PACStack::MaskReg)
+               && !check->killsRegister(PACStack::MaskReg);
+      })) && "Shouldn't be using, defining, or killing MaskReg");
   assert((flag != MachineInstr::FrameSetup
-          || !MBB.isLiveIn(PACStack::maskReg)) && "maskReg live in FrameSetup MBB");
+          || !MBB.isLiveIn(PACStack::MaskReg)) && "MaskReg live in FrameSetup MBB");
 
-  // MOV maskReg <- XZR
+  // MOV MaskReg <- XZR
   (MBBI == MBB.end()
    ? BuildMI(&MBB, DL, TII->get(AArch64::ORRXrs))
    : BuildMI(MBB, MBBI, DL, TII->get(AArch64::ORRXrs)))
-          .addReg(PACStack::maskReg, RegState::Define)
+          .addReg(PACStack::MaskReg, RegState::Define)
           .addUse(AArch64::XZR)
           .addUse(AArch64::XZR).addImm(0)
           .setMIFlag(flag);
-  // maskReg <- PACIA maskReg, CR
+  // MaskReg <- PACIA MaskReg, CR
   (MBBI == MBB.end()
    ? BuildMI(&MBB, DL, TII->get(AArch64::PACIA))
    : BuildMI(MBB, MBBI, DL, TII->get(AArch64::PACIA)))
-            .addReg(PACStack::maskReg, RegState::Define)
+            .addReg(PACStack::MaskReg, RegState::Define)
             .addUse(PACStack::CR)
             .setMIFlag(flag);
   // LR <- EOR LR, mask
@@ -2303,13 +2303,13 @@ inline void AArch64FrameLowering::insertCollisionProtection(MachineBasicBlock &M
    : BuildMI(MBB, MBBI, DL, TII->get(AArch64::EORXrs)))
             .addReg(AArch64::LR, RegState::Define)
             .addReg(AArch64::LR)
-            .addReg(PACStack::maskReg).addImm(0)
+            .addReg(PACStack::MaskReg).addImm(0)
             .setMIFlag(flag);
-  // MOV maskReg <- XZR
+  // MOV MaskReg <- XZR
   (MBBI == MBB.end()
    ? BuildMI(&MBB, DL, TII->get(AArch64::ORRXrs))
    : BuildMI(MBB, MBBI, DL, TII->get(AArch64::ORRXrs)))
-          .addReg(PACStack::maskReg, RegState::Define) .addUse(AArch64::XZR)
+          .addReg(PACStack::MaskReg, RegState::Define) .addUse(AArch64::XZR)
           .addUse(AArch64::XZR).addImm(0)
           .setMIFlag(flag);
 }
@@ -2327,26 +2327,27 @@ inline void AArch64FrameLowering::PACStackPostFrameSetup(MachineBasicBlock &MBB,
   if (!needsPACStack(MF)) return;
 
   assert(std::all_of(MBB.begin(), MBBI, [](MachineBasicBlock::iterator check) {
-    return -1 == check->findRegisterUseOperandIdx(PACStack::maskReg)
-           && -1 == check->findRegisterDefOperandIdx(PACStack::maskReg)
-           && !check->killsRegister(PACStack::maskReg);
-  }) && "Shouldn't be using, defining, or killing maskReg");
+    return -1 == check->findRegisterUseOperandIdx(PACStack::MaskReg)
+           && -1 == check->findRegisterDefOperandIdx(PACStack::MaskReg)
+           && !check->killsRegister(PACStack::MaskReg);
+  }) && "Shouldn't be using, defining, or killing MaskReg");
 
   // Don't kill LR or PACStack::CR on store in FrameSetup
-  for (auto str = (MBBI != MBB.end() ?
+  for (auto StoreInst = (MBBI != MBB.end() ?
                    MBBI->getReverseIterator() : MBB.rbegin());
-       str != MBB.rend(); ++str) {
-    switch(str->getOpcode()) {
+       StoreInst != MBB.rend(); ++StoreInst) {
+    switch(StoreInst->getOpcode()) {
       case AArch64::STRXui:
       case AArch64::STRXpre:
       case AArch64::STPXpre:
       case AArch64::STPXi:
-        if (str->killsRegister(AArch64::LR)) {
-          str->clearRegisterKills(AArch64::LR, &TRI);
-        }
-        if (str->killsRegister(PACStack::CR)) {
-          str->clearRegisterKills(PACStack::CR, &TRI);
-        }
+        if (StoreInst->killsRegister(AArch64::LR))
+          StoreInst->clearRegisterKills(AArch64::LR, &TRI);
+        if (StoreInst->killsRegister(PACStack::CR))
+          StoreInst->clearRegisterKills(PACStack::CR, &TRI);
+        break;
+      default:
+        break;
     }
   }
 
@@ -2385,25 +2386,25 @@ inline void AArch64FrameLowering::PACStackPostFrameDestroy(
   if (!needsPACStack(MF)) return;
 
   MachineBasicBlock::iterator MBBI = MBB.getFirstTerminator();
-  MachineBasicBlock::reverse_iterator rMBBI;
+  MachineBasicBlock::reverse_iterator ReverseMBBI;
 
   DebugLoc DL;
 
-  // Find where LR is loaded from the stack and just throw it away  into maskReg)
+  // Find where LR is loaded from the stack and just throw it away into MaskReg)
   // FIXME: This load should be completely eliminated! (but the pair must stay)
-  for (rMBBI = (MBBI != MBB.end() ? MBBI->getReverseIterator() : MBB.rbegin());
-       rMBBI != MBB.rend() && !rMBBI->definesRegister(AArch64::LR);
-       ++rMBBI);
-  MachineOperand *op = rMBBI->findRegisterDefOperand(AArch64::LR);
-  assert(op != nullptr && "we expect to always find this");
-  op->setReg(PACStack::maskReg);
+  for (ReverseMBBI = (MBBI != MBB.end() ? MBBI->getReverseIterator() : MBB.rbegin());
+       ReverseMBBI != MBB.rend() && !ReverseMBBI->definesRegister(AArch64::LR);
+       ++ReverseMBBI);
+  MachineOperand *Op = ReverseMBBI->findRegisterDefOperand(AArch64::LR);
+  assert(Op != nullptr && "we expect to always find this");
+  Op->setReg(PACStack::MaskReg);
 
   // Find where CR is loaded
-  for (rMBBI = (MBBI != MBB.end() ? MBBI->getReverseIterator() : MBB.rbegin());
-       rMBBI != MBB.rend() && !rMBBI->definesRegister(PACStack::CR);
-      ++rMBBI);
+  for (ReverseMBBI = (MBBI != MBB.end() ? MBBI->getReverseIterator() : MBB.rbegin());
+       ReverseMBBI != MBB.rend() && !ReverseMBBI->definesRegister(PACStack::CR);
+      ++ReverseMBBI);
   // MOV LR <- CR
-  BuildMI(MBB, rMBBI->getIterator(), rMBBI->getDebugLoc(),
+  BuildMI(MBB, ReverseMBBI->getIterator(), ReverseMBBI->getDebugLoc(),
           TII->get(AArch64::ORRXrs))
           .addReg(AArch64::LR, RegState::Define)
           .addUse(AArch64::XZR)
@@ -2435,8 +2436,8 @@ bool AArch64FrameLowering::needsPACStack(const MachineFunction *MF) const {
     return false;
 
   for (const auto &Info : MF->getFrameInfo().getCalleeSavedInfo()) {
-    const auto r = Info.getReg();
-    if (r == AArch64::LR || r == PACStack::CR) {
+    const auto Reg = Info.getReg();
+    if (Reg == AArch64::LR || Reg == PACStack::CR) {
       return true;
     }
   }

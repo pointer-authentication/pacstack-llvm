@@ -19,12 +19,10 @@
 //       is not sufficient for arbitrary PAuth conversions!
 //===----------------------------------------------------------------------===//
 
-#include "PACStack/AArch64PACStack.h"
 #include "AArch64.h"
 #include "AArch64InstrInfo.h"
 #include "AArch64Subtarget.h"
-#include "llvm/CodeGen/MachineFunctionPass.h"
-#include "llvm/CodeGen/MachineInstrBuilder.h"
+#include "PACStack/AArch64PACStack.h"
 
 #define DEBUG_TYPE "AArch64DummyPA"
 
@@ -51,7 +49,7 @@ private:
   bool convertSpPAInstr(MachineBasicBlock &MBB, MachineInstr &MI);
   bool convertRetPAInstr(MachineBasicBlock &MBB, MachineInstr &MI);
   void insertEmulatedTimings(MachineBasicBlock &MBB, MachineInstr &MI,
-                             unsigned dst, unsigned mod);
+                             unsigned Dst, unsigned Mod);
   void fixupHack(MachineBasicBlock &MBB, MachineInstr &MI);
 
 
@@ -65,11 +63,11 @@ private:
 
   inline MachineInstrBuilder buildMOV(MachineBasicBlock &MBB,
                                       const DebugLoc &DL,
-                                      unsigned dst,
-                                      unsigned src,
+                                      unsigned Dst,
+                                      unsigned Src,
                                       MachineInstr *MI) const {
-    return buildMOV(MBB, DL, MI).addReg(dst, RegState::Define)
-        .addUse(AArch64::XZR).addUse(src).addImm(0);
+    return buildMOV(MBB, DL, MI).addReg(Dst, RegState::Define)
+        .addUse(AArch64::XZR).addUse(Src).addImm(0);
   }
 
   inline MachineInstrBuilder buildAUTIA(MachineBasicBlock &MBB,
@@ -81,10 +79,10 @@ private:
 
   inline MachineInstrBuilder buildAUTIA(MachineBasicBlock &MBB,
                                         const DebugLoc &DL,
-                                        unsigned ptr,
-                                        unsigned mod,
+                                        unsigned Ptr,
+                                        unsigned Mod,
                                         MachineInstr *MI) const {
-    return buildAUTIA(MBB, DL, MI).addReg(ptr, RegState::Define).addUse(mod);
+    return buildAUTIA(MBB, DL, MI).addReg(Ptr, RegState::Define).addUse(Mod);
   }
 
   inline MachineInstrBuilder buildPACIA(MachineBasicBlock &MBB,
@@ -96,10 +94,10 @@ private:
 
   inline MachineInstrBuilder buildPACIA(MachineBasicBlock &MBB,
                                         const DebugLoc &DL,
-                                        unsigned ptr,
-                                        unsigned mod,
+                                        unsigned Ptr,
+                                        unsigned Mod,
                                         MachineInstr *MI) const {
-    return buildPACIA(MBB, DL, MI).addReg(ptr, RegState::Define).addUse(mod);
+    return buildPACIA(MBB, DL, MI).addReg(Ptr, RegState::Define).addUse(Mod);
   }
 
   inline MachineInstrBuilder buildEOR(MachineBasicBlock &MBB,
@@ -111,21 +109,21 @@ private:
 
   inline MachineInstrBuilder buildEOR(MachineBasicBlock &MBB,
                                       const DebugLoc &DL,
-                                      unsigned dst,
-                                      unsigned src,
+                                      unsigned Dst,
+                                      unsigned Src,
                                       MachineInstr *MI) const {
-    return buildEOR(MBB, DL, MI).addReg(dst, RegState::Define)
-        .addReg(dst).addReg(src).addImm(0);
+    return buildEOR(MBB, DL, MI).addReg(Dst, RegState::Define)
+        .addReg(Dst).addReg(Src).addImm(0);
   }
 
 #ifdef PACSTACK_DO_CHECKING
   bool checkFrameSetup(MachineBasicBlock &MBB, MachineInstr &MI);
   bool checkFrameDestroy(MachineBasicBlock &MBB, MachineInstr &MI);
-#endif /* PACSTACK_DO_CHECKING */
+#endif // PACSTACK_DO_CHECKING
 
   inline bool isPAC(MachineInstr &MI);
 };
-}
+} // namespace
 
 char AArch64DummyPA::ID = 0;
 
@@ -138,10 +136,10 @@ bool AArch64DummyPA::runOnMachineFunction(MachineFunction &MF) {
   TII = STI->getInstrInfo();
   TRI = STI->getRegisterInfo();
 
-  bool changed = false;
+  bool Changed = false;
 
   for (auto &MBB : MF) {
-    for (auto MBBI = MBB.begin(), end = MBB.end(); MBBI != end; ) {
+    for (auto MBBI = MBB.begin(), End = MBB.end(); MBBI != End; ) {
       auto &MI = *MBBI++; // update iterator here, since we might remove MI
 
       switch(MI.getOpcode()) {
@@ -155,17 +153,17 @@ bool AArch64DummyPA::runOnMachineFunction(MachineFunction &MF) {
         case AArch64::AUTIB:
         case AArch64::AUTDA:
         case AArch64::AUTDB:
-          changed = convertBasicPAInstr(MBB, MI) | changed;
+          Changed = convertBasicPAInstr(MBB, MI) | Changed;
           break;
         case AArch64::PACIASP:
         case AArch64::PACIBSP:
         case AArch64::AUTIASP:
         case AArch64::AUTIBSP:
-          changed = convertSpPAInstr(MBB, MI) | changed;
+          Changed = convertSpPAInstr(MBB, MI) | Changed;
           break;
         case AArch64::RETAA:
         case AArch64::RETAB:
-          changed = convertRetPAInstr(MBB, MI) | changed;
+          Changed = convertRetPAInstr(MBB, MI) | Changed;
           break;
         case AArch64::PACGA:
         case AArch64::PACDZA:
@@ -189,20 +187,20 @@ bool AArch64DummyPA::runOnMachineFunction(MachineFunction &MF) {
     }
   }
 
-  return changed;
+  return Changed;
 }
 
 bool AArch64DummyPA::convertBasicPAInstr(MachineBasicBlock &MBB, MachineInstr &MI) {
-  auto dst = MI.getOperand(0).getReg();
-  auto mod = MI.getOperand(1).getReg();
+  auto Dst = MI.getOperand(0).getReg();
+  auto Mod = MI.getOperand(1).getReg();
 
 #ifdef PACSTACK_DO_CHECKING
   // These are doing some checking for possible errors due to optimizations
   assert(!MI.getFlag(MachineInstr::FrameSetup) || checkFrameSetup(MBB, MI));
   assert(!MI.getFlag(MachineInstr::FrameDestroy) || checkFrameDestroy(MBB, MI));
-#endif /* PACSSTACK_DO_CHECKING */
+#endif /* PACSTACK_DO_CHECKING */
 
-  insertEmulatedTimings(MBB, MI, dst, mod);
+  insertEmulatedTimings(MBB, MI, Dst, Mod);
 
   if (MI.getFlag(MachineInstr::FrameSetup))
     fixupHack(MBB, MI);
@@ -213,8 +211,8 @@ bool AArch64DummyPA::convertBasicPAInstr(MachineBasicBlock &MBB, MachineInstr &M
 
 bool AArch64DummyPA::convertSpPAInstr(MachineBasicBlock &MBB, MachineInstr &MI) {
   const auto &DL = MI.getDebugLoc();
-  auto dst = MI.getOperand(0).getReg();
-  auto mod = AArch64::X15;
+  auto Dst = MI.getOperand(0).getReg();
+  auto Mod = AArch64::X15;
 
   if (!(MI.getFlag(MachineInstr::FrameDestroy) || MI.getFlag(MachineInstr::FrameSetup)))
     llvm_unreachable("dummy conversion of SP variants only supported in FrameSetup or FrameDestroy");
@@ -224,12 +222,12 @@ bool AArch64DummyPA::convertSpPAInstr(MachineBasicBlock &MBB, MachineInstr &MI) 
          MI.getOpcode() == AArch64::AUTIASP ||
          MI.getOpcode() == AArch64::AUTIBSP);
 
-  BuildMI(*MI.getParent(), MI, DL, TII->get(AArch64::ADDXri), mod)
+  BuildMI(*MI.getParent(), MI, DL, TII->get(AArch64::ADDXri), Mod)
           .addUse(AArch64::SP)
           .addImm(0)
           .addImm(0);
 
-  insertEmulatedTimings(MBB, MI, dst, mod);
+  insertEmulatedTimings(MBB, MI, Dst, Mod);
 
   MI.removeFromParent();
   return true;
@@ -237,18 +235,18 @@ bool AArch64DummyPA::convertSpPAInstr(MachineBasicBlock &MBB, MachineInstr &MI) 
 
 bool AArch64DummyPA::convertRetPAInstr(MachineBasicBlock &MBB, MachineInstr &MI) {
   const auto &DL = MI.getDebugLoc();
-  auto dst = AArch64::LR;
-  auto mod = AArch64::X15;
+  auto Dst = AArch64::LR;
+  auto Mod = AArch64::X15;
 
   assert(MI.getOpcode() == AArch64::RETAA ||
          MI.getOpcode() == AArch64::RETAB);
 
-  BuildMI(*MI.getParent(), MI, DL, TII->get(AArch64::ADDXri), mod)
+  BuildMI(*MI.getParent(), MI, DL, TII->get(AArch64::ADDXri), Mod)
           .addUse(AArch64::SP)
           .addImm(0)
           .addImm(0);
 
-  insertEmulatedTimings(MBB, MI, dst, mod);
+  insertEmulatedTimings(MBB, MI, Dst, Mod);
 
   BuildMI(MBB, MI, DL, TII->get(AArch64::RET))
           .addReg(AArch64::LR, RegState::Undef);
@@ -276,6 +274,9 @@ void AArch64DummyPA::fixupHack(MachineBasicBlock &MBB,
               MBBI->clearRegisterKills(AArch64::LR, TRI);
               return;
             }
+            break;
+          default:
+            break;
         }
       }
   }
@@ -283,7 +284,7 @@ void AArch64DummyPA::fixupHack(MachineBasicBlock &MBB,
 
 void AArch64DummyPA::insertEmulatedTimings(MachineBasicBlock &MBB,
                                            MachineInstr &MI,
-                                           unsigned dst, unsigned mod) {
+                                           unsigned Dst, unsigned Mod) {
   DebugLoc DL = MI.getDebugLoc();
 
   const MCInstrDesc &MCID = (isPAC(MI)
@@ -292,51 +293,51 @@ void AArch64DummyPA::insertEmulatedTimings(MachineBasicBlock &MBB,
 
   if (MI.getFlag(MachineInstr::FrameDestroy)) {
     BuildMI(MBB, MI, DL, MCID)
-            .addDef(dst)
-            .addUse(dst).addReg(dst).addImm(48)
+            .addDef(Dst)
+            .addUse(Dst).addReg(Dst).addImm(48)
             .setMIFlag(MachineInstr::FrameDestroy);
     BuildMI(MBB, MI, DL, MCID)
-            .addDef(dst)
-            .addUse(dst).addReg(mod).addImm(52)
+            .addDef(Dst)
+            .addUse(Dst).addReg(Mod).addImm(52)
             .setMIFlag(MachineInstr::FrameDestroy);
     BuildMI(MBB, MI, DL, MCID)
-            .addDef(dst)
-            .addUse(dst).addReg(mod).addImm(56)
+            .addDef(Dst)
+            .addUse(Dst).addReg(Mod).addImm(56)
             .setMIFlag(MachineInstr::FrameDestroy);
     BuildMI(MBB, MI, DL, MCID)
-            .addDef(dst)
-            .addUse(dst).addReg(mod).addImm(60)
+            .addDef(Dst)
+            .addUse(Dst).addReg(Mod).addImm(60)
             .setMIFlag(MachineInstr::FrameDestroy);
   } else if (MI.getFlag(MachineInstr::FrameSetup)) {
     BuildMI(MBB, MI, DL, MCID)
-            .addDef(dst)
-            .addUse(dst).addReg(dst).addImm(48)
+            .addDef(Dst)
+            .addUse(Dst).addReg(Dst).addImm(48)
             .setMIFlag(MachineInstr::FrameSetup);
     BuildMI(MBB, MI, DL, MCID)
-            .addDef(dst)
-            .addUse(dst).addReg(mod).addImm(52)
+            .addDef(Dst)
+            .addUse(Dst).addReg(Mod).addImm(52)
             .setMIFlag(MachineInstr::FrameSetup);
     BuildMI(MBB, MI, DL, MCID)
-            .addDef(dst)
-            .addUse(dst).addReg(mod).addImm(56)
+            .addDef(Dst)
+            .addUse(Dst).addReg(Mod).addImm(56)
             .setMIFlag(MachineInstr::FrameSetup);
     BuildMI(MBB, MI, DL, MCID)
-            .addDef(dst)
-            .addUse(dst).addReg(mod).addImm(60)
+            .addDef(Dst)
+            .addUse(Dst).addReg(Mod).addImm(60)
             .setMIFlag(MachineInstr::FrameSetup);
   } else  {
     BuildMI(MBB, MI, DL, MCID)
-            .addDef(dst)
-            .addUse(dst).addReg(dst).addImm(48);
+            .addDef(Dst)
+            .addUse(Dst).addReg(Dst).addImm(48);
     BuildMI(MBB, MI, DL, MCID)
-            .addDef(dst)
-            .addUse(dst).addReg(mod).addImm(52);
+            .addDef(Dst)
+            .addUse(Dst).addReg(Mod).addImm(52);
     BuildMI(MBB, MI, DL, MCID)
-            .addDef(dst)
-            .addUse(dst).addReg(mod).addImm(56);
+            .addDef(Dst)
+            .addUse(Dst).addReg(Mod).addImm(56);
     BuildMI(MBB, MI, DL, MCID)
-            .addDef(dst)
-            .addUse(dst).addReg(mod).addImm(60);
+            .addDef(Dst)
+            .addUse(Dst).addReg(Mod).addImm(60);
   }
 }
 
@@ -417,4 +418,4 @@ bool AArch64DummyPA::checkFrameDestroy(MachineBasicBlock &MBB,
                                        MachineInstr &MI) {
   return true;
 }
-#endif /* PACSTACK_DO_CHECKING */
+#endif // PACSTACK_DO_CHECKING
