@@ -42,10 +42,8 @@ inline bool hasPACStackAttribute(const MachineFunction &MF) {
   if (F.hasFnAttribute(Attribute::AttrKind::NoReturn))
     return false; // Skip NoReturn functions (which might include main)
 
-  if (!F.hasFnAttribute(PACStackAttribute))
-    return false;
-
-  return (F.getFnAttribute(PACStackAttribute).getValueAsString() != "none");
+  return F.hasFnAttribute(PACStackAttribute) &&
+         F.getFnAttribute(PACStackAttribute).getValueAsString() != "none";
 }
 
 }
