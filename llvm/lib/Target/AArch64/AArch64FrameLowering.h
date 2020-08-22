@@ -85,6 +85,19 @@ public:
                                int FI) const override;
   int getSEHFrameIndexOffset(const MachineFunction &MF, int FI) const;
 
+  inline void insertCollisionProtection(MachineBasicBlock &MBB,
+                                        MachineBasicBlock::iterator &MBBI,
+                                        const DebugLoc &DL,
+                                        const MachineInstr::MIFlag &flag) const;
+
+  bool needsPACStack(const MachineFunction *MF) const;
+
+  void PACStackPostFrameSetup(MachineBasicBlock &MBB,
+                                     MachineBasicBlock::iterator &MBBI,
+                                     const DebugLoc &DL) const;
+
+  void PACStackPostFrameDestroy(MachineBasicBlock &MBB) const;
+
 private:
   bool shouldCombineCSRLocalStackBump(MachineFunction &MF,
                                       unsigned StackBumpBytes) const;
