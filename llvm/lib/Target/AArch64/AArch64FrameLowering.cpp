@@ -2425,12 +2425,13 @@ inline void AArch64FrameLowering::PACStackPostFrameDestroy(
 }
 
 bool AArch64FrameLowering::needsPACStack(const MachineFunction *MF) const {
+  // FIXME: Verify if hasPACStackAttribute is safe here!
+  // if (!PACStack::hasPACStackAttribute(*MF))
+  //   return false;
+
   const Function &F = MF->getFunction();
-
-  if (!F.hasFnAttribute("pacstack"))
-    return false;
-
-  if (F.getFnAttribute("pacstack").getValueAsString() == "none")
+  if (!F.hasFnAttribute("pacstack") ||
+      F.getFnAttribute("pacstack").getValueAsString() == "none")
     return false;
 
   for (const auto &Info : MF->getFrameInfo().getCalleeSavedInfo()) {
