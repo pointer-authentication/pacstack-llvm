@@ -36,44 +36,6 @@ static constexpr unsigned CR = AArch64::X28;
 static constexpr unsigned CRSub = AArch64::W28;
 static constexpr unsigned maskReg = AArch64::X15;
 
-static inline bool defsReg(const MachineBasicBlock &MBB, const unsigned reg) {
-  for (const auto &MI : MBB)
-    if (MI.findRegisterDefOperandIdx(reg) != -1)
-      return true;
-  return false;
-}
-
-static inline bool defsReg(const MachineFunction &MF, const unsigned reg) {
-  for (const auto &MBB : MF)
-    if (defsReg(MBB, reg))
-      return true;
-  return false;
-}
-
-static inline bool isStore(const MachineInstr &MI) {
-  switch(MI.getOpcode()) {
-    case AArch64::STRXui:
-    case AArch64::STRXpre:
-    case AArch64::STPXpre:
-    case AArch64::STPXi:
-      return true;
-    default:
-      return false;
-  }
-}
-
-static inline bool isLoad(const MachineInstr &MI) {
-  switch(MI.getOpcode()) {
-    case AArch64::LDRXui:
-    case AArch64::LDRXpost:
-    case AArch64::LDPXi:
-    case AArch64::LDPXpost:
-      return true;
-    default:
-      return false;
-  }
-}
-
 inline bool hasPACStackAttribute(const MachineFunction &MF) {
   const auto &F = MF.getFunction();
 
@@ -84,27 +46,6 @@ inline bool hasPACStackAttribute(const MachineFunction &MF) {
     return false;
 
   return (F.getFnAttribute(PACStackAttribute).getValueAsString() != "none");
-}
-
-inline bool needsPACStack(const MachineFunction &MF) {
-  if (!hasPACStackAttribute(MF))
-    return false;
-
-  for (const auto &Info : MF.getFrameInfo().getCalleeSavedInfo()) {
-    const auto r = Info.getReg();
-    if (r == AArch64::LR || r == PACStack::CR)
-      return true;
-  }
-
-  return false;
-}
-
-inline bool doPACStackMasking(MachineFunction &MF) {
-  const auto &F = MF.getFunction();
-
-  if (!F.hasFnAttribute(PACStackAttribute))
-    return false;
-  return (F.getFnAttribute(PACStackAttribute).getValueAsString() == "full");
 }
 
 class AArch64PACStackCommon {
